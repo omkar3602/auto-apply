@@ -75,3 +75,58 @@ Single `jobs` table (`models.py`). `status` drives everything:
    that upserts `Job` rows with a new `source` value (see `scrapers/jobright.py`).
 2. Register it in `scrapers/__init__.py`'s `SOURCES` dict — it automatically
    gets a nav tab, sync button, and its own locked background worker.
+
+## Using it from your phone (Tailscale)
+
+The app is installable as a PWA and its layout is phone-friendly. The only
+missing piece is reachability: your phone needs an HTTPS URL pointing at the
+app (a PWA won't install over plain HTTP unless it's localhost).
+
+Tailscale solves that without hosting anything. It puts your Mac and phone on
+a private network and gives the Mac a real HTTPS `*.ts.net` address that only
+your own devices can reach. **The app itself doesn't change at all** — it
+keeps running on your Mac, right next to the `browser_profiles/` login
+sessions Sync and Apply depend on.
+
+### Setup
+
+1. **Install Tailscale on the Mac** and sign in (any of Google/GitHub/etc.):
+   ```bash
+   brew install --cask tailscale
+   ```
+   or download from [tailscale.com/download](https://tailscale.com/download).
+
+2. **Install Tailscale on your phone** (App Store / Play Store) and sign in
+   with the *same* account, so both devices join the same tailnet.
+
+3. **Enable HTTPS for your tailnet** — Tailscale admin console →
+   DNS → enable MagicDNS, then enable HTTPS Certificates. This is what makes
+   the `*.ts.net` cert possible.
+
+4. **Start the app**, then put Tailscale Serve in front of it:
+   ```bash
+   python app.py                      # terminal 1 - listens on :8000
+   tailscale serve --bg 8000          # terminal 2 - proxies HTTPS -> :8000
+   tailscale serve status             # prints your https://<mac>.<tailnet>.ts.net URL
+   ```
+
+5. **Open that URL on your phone**, then use Share → "Add to Home Screen"
+   (iOS Safari) or the install prompt (Android Chrome).
+
+To stop sharing: `tailscale serve --https=443 off`.
+
+### Notes and caveats
+
+- **Your Mac must be awake** for anything to work — it's serving the app, not
+  just the automation. Worth checking System Settings → Battery/Lock Screen
+  if it sleeps too eagerly.
+- **Nothing is public.** Only devices signed into your tailnet can reach the
+  URL, which is why there's no login screen — adding one is possible but
+  redundant here.
+- **Known iOS issue:** [tailscale#19147](https://github.com/tailscale/tailscale/issues/19147)
+  reports Serve HTTPS endpoints failing on iPhone with an SSL error. It may
+  be stale or situational — test step 5 early. If it does bite, the
+  `hosted-fly-agent` branch has a complete, tested Fly.io deployment as a
+  fallback (see its `BRANCH-NOTES.md`).
+- The service worker deliberately does **not** register on
+  `localhost`/`127.0.0.1`, so local development never picks up PWA caching.

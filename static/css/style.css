@@ -238,3 +238,39 @@ body {
 .status-badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .status-applied { background: #d7f5e3; }
 .status-passed { background: #eee; color: var(--muted); }
+
+/* Phone layout. The desktop topbar/content padding overflows a ~390px
+   viewport and forces the nav labels to wrap, so tighten spacing and let the
+   tab strip scroll sideways instead of wrapping. */
+@media (max-width: 640px) {
+  .topbar {
+    gap: 12px;
+    padding: 12px 16px;
+    /* keep the nav on one line and scrollable rather than wrapping */
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .topbar::-webkit-scrollbar { display: none; }
+  .brand { font-size: 16px; white-space: nowrap; }
+  .tabs { gap: 4px; }
+  .tab-link { padding: 6px 10px; font-size: 14px; white-space: nowrap; }
+
+  .content { padding: 16px 16px 48px; }
+
+  .tab-header { flex-wrap: wrap; gap: 10px; }
+  .tab-header h1 { font-size: 20px; }
+
+  /* one card per row - 300px minimums leave no room for gutters here */
+  .card-grid { grid-template-columns: 1fr; gap: 16px; }
+
+  .card-title { font-size: 16px; }
+
+  /* stack company above the buttons so long names don't squeeze them */
+  .card-footer { flex-wrap: wrap; }
+  .card-buttons { width: 100%; }
+  .card-buttons .btn { flex: 1; padding: 10px 16px; }
+
+  .detail-actions .btn { flex: 1; }
+
+  .history-table { display: block; overflow-x: auto; }
+}

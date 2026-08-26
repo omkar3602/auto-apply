@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Auto Apply{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <meta name="theme-color" content="#111111">
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +26,13 @@
     {% block content %}{% endblock %}
   </main>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    // Only register on a real hosted domain - never on localhost, so local
+    // `python app.py` dev never picks up a service worker or its caching.
+    if ("serviceWorker" in navigator && !["localhost", "127.0.0.1"].includes(location.hostname)) {
+      navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
+    }
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
