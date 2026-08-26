@@ -139,3 +139,64 @@ To stop sharing: `tailscale serve --https=443 off`.
   fallback (see its `BRANCH-NOTES.md`).
 - The service worker deliberately does **not** register on
   `localhost`/`127.0.0.1`, so local development never picks up PWA caching.
+
+## Keeping it running in the background
+
+Two separate things get confused here:
+
+- **Locking your screen does not stop the app.** Neither does the display
+  going dark. Processes keep running.
+- **The system sleeping does stop it.** That's what actually needs
+  preventing — and it only applies when the Mac is idle *and* you haven't
+  told it otherwise.
+
+Running `python app.py` in a terminal also dies when you close that window
+or log out. The fix for both is a `launchd` agent, which is macOS's native
+way to run something in the background.
+
+### Install
+
+```bash
+cp tools/com.autoapply.server.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.autoapply.server.plist
+```
+
+That's it. The app now starts at login, restarts itself if it crashes, and
+survives screen locks and terminal closes.
+
+The agent wraps the app in `caffeinate -s`, which holds off system sleep
+**only while the app is running, and only on AC power** — precisely the
+"plugged in, screen locked" case. No permanent `pmset` change needed, and
+the moment the service stops your Mac sleeps normally again. Your display
+still sleeps and your screen still locks as usual.
+
+### Managing it
+
+```bash
+launchctl list | grep autoapply       # is it running? (shows PID)
+tail -f /tmp/autoapply.log            # app output
+tail -f /tmp/autoapply.err.log        # errors
+
+launchctl unload ~/Library/LaunchAgents/com.autoapply.server.plist   # stop
+launchctl load   ~/Library/LaunchAgents/com.autoapply.server.plist   # start
+```
+
+To restart after changing code, unload then load.
+
+### Caveats
+
+- **The lid still wins.** Closing a MacBook's lid sleeps it regardless of
+  `caffeinate` (unless clamshell mode with an external display). Leave it
+  open.
+- **This project lives on `/Volumes/Personal`.** If that disk isn't mounted
+  at login the agent will fail and retry every 30s (`ThrottleInterval`),
+  recovering on its own once it mounts. Check the error log if the app
+  seems missing after a reboot.
+- **Tailscale Serve config persists on its own** — `tailscale serve --bg`
+  is stored by the Tailscale daemon and survives reboots, so it doesn't
+  need an agent of its own.
+- **Debug mode is off by default** (see `app.py`). That matters here:
+  Tailscale Serve exposes the app to your other devices, and Flask's
+  interactive debugger can execute code. Tracebacks still land in
+  `/tmp/autoapply.err.log`. For the in-browser debugger while developing
+  locally, run `AUTO_APPLY_DEBUG=true python app.py` by hand instead.

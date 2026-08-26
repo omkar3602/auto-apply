@@ -1,3 +1,5 @@
+import os
+
 from flask import Flask, redirect, url_for
 
 from config import Config
@@ -32,4 +34,11 @@ def create_app():
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, port=8000)
+    # Debug is off by default: once `tailscale serve` puts this in front of
+    # your tailnet, Werkzeug's interactive debugger would be reachable from
+    # other devices, and it can execute code. Tracebacks still go to the
+    # terminal/log either way. Set AUTO_APPLY_DEBUG=true for the in-browser
+    # debugger while working locally.
+    debug = os.environ.get("AUTO_APPLY_DEBUG", "").lower() == "true"
+    port = int(os.environ.get("PORT", "8000"))
+    app.run(debug=debug, use_reloader=False, port=port)
