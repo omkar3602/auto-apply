@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · Auto Apply{% endblock %}
+
+{% block content %}
+<div class="detail-page">
+  <a class="back-link" href="{{ url_for('jobs.tab_view', source=job.source) }}">&larr; Back</a>
+
+  <h1>{{ job.title }}</h1>
+  <div class="detail-meta">
+    {% if job.company %}<span>{{ job.company }}</span>{% endif %}
+    {% if job.location %}<span>{{ job.location }}</span>{% endif %}
+    {% if job.work_mode %}<span class="badge">{{ job.work_mode }}</span>{% endif %}
+    <span class="badge badge-board">{{ job.job_board }}</span>
+    {% if job.posted_label %}<span>{{ job.posted_label }}</span>{% endif %}
+  </div>
+
+  {% set tags = job.tag_list() %}
+  {% if tags %}
+  <div class="tags">
+    {% for tag in tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+  </div>
+  {% endif %}
+
+  <a class="btn btn-primary application-link" href="{{ job.job_url }}" target="_blank" rel="noopener">
+    Application Link
+  </a>
+
+  <h2 class="section-heading">Job Description</h2>
+  {% if job.description %}
+  <div class="description">{{ job.description }}</div>
+  {% else %}
+  <div class="description description-empty">No job description available for this listing.</div>
+  {% endif %}
+
+  <div class="detail-status">
+    Status: <strong>{{ job.status }}</strong>
+    {% if job.status_message %}<span class="error-msg">{{ job.status_message }}</span>{% endif %}
+  </div>
+
+  <div class="detail-actions card-buttons" data-job-id="{{ job.id }}">
+    <button class="btn btn-pass" data-action="pass">Pass</button>
+    <button class="btn btn-apply" data-action="apply" {% if job.status == "applying" %}disabled{% endif %}>
+      {% if job.status == "applying" %}Applying…{% elif job.status == "apply_failed" %}Retry{% else %}Apply{% endif %}
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>window.AUTO_APPLY_DETAIL_REDIRECT = {{ url_for('jobs.tab_view', source=job.source)|tojson }};</script>
+{% endblock %}

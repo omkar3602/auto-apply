@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}History · Auto Apply{% endblock %}
+
+{% block content %}
+<div class="tab-header">
+  <h1>History</h1>
+</div>
+
+<form class="filters" method="get">
+  <select name="source" onchange="this.form.submit()">
+    <option value="">All sources</option>
+    {% for key, meta in sources.items() %}
+    <option value="{{ key }}" {% if selected_source == key %}selected{% endif %}>{{ meta.label }}</option>
+    {% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All statuses</option>
+    <option value="applied" {% if selected_status == "applied" %}selected{% endif %}>Applied</option>
+    <option value="passed" {% if selected_status == "passed" %}selected{% endif %}>Passed</option>
+  </select>
+</form>
+
+<table class="history-table">
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Company</th>
+      <th>Source</th>
+      <th>Status</th>
+      <th>Changed</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for job in jobs %}
+    <tr>
+      <td>{{ job.title }}</td>
+      <td>{{ job.company or "—" }}</td>
+      <td>{{ job.source }}</td>
+      <td><span class="status-badge status-{{ job.status }}">{{ job.status }}</span></td>
+      <td>{{ job.status_changed_at.strftime("%Y-%m-%d %H:%M") if job.status_changed_at else "—" }}</td>
+      <td><a href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">View</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="empty-state">Nothing here yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

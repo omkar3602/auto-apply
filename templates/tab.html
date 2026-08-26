@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ nav_sources[source].label }} · Auto Apply{% endblock %}
+
+{% block content %}
+<div class="tab-header">
+  <h1>{{ nav_sources[source].label }}</h1>
+  <div class="sync-controls">
+    <span class="sync-error" id="sync-error"></span>
+    <span class="sync-pill" id="sync-pill" data-source="{{ source }}">
+      {% if sync_status.state == 'running' %}Syncing…{% else %}Idle{% endif %}
+    </span>
+    <button id="sync-btn" class="btn btn-secondary" data-source="{{ source }}">Sync Jobs</button>
+  </div>
+</div>
+
+<div class="card-grid-wrap">
+<div class="card-grid" id="card-grid">
+  {% for job in jobs %}
+  <div class="card card-color-{{ loop.index0 % 6 }}" data-job-id="{{ job.id }}">
+    <div class="card-loading-overlay" hidden><div class="spinner spinner-lg"></div></div>
+    <div class="card-top">
+      {% if job.location %}<div class="location">{{ job.location }}</div>{% endif %}
+      <div class="badge-row">
+        {% if job.work_mode %}<span class="badge">{{ job.work_mode }}</span>{% endif %}
+        <span class="badge badge-board">{{ job.job_board }}</span>
+        {% if job.posted_label %}<span class="posted">{{ job.posted_label }}</span>{% endif %}
+      </div>
+    </div>
+
+    <a class="card-title" href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">{{ job.title }}</a>
+
+    {% set tags = job.tag_list() %}
+    {% if tags %}
+    <div class="tags">
+      {% for tag in tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card-links">
+      <a class="link-btn" href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">Details</a>
+      <a class="link-btn" href="{{ job.job_url }}" target="_blank" rel="noopener">Application Link</a>
+    </div>
+
+    <div class="card-footer">
+      <div class="company">
+        <span class="company-avatar">{{ (job.company or "?")[0]|upper }}</span>
+        <span class="company-name">{{ job.company or "Unknown company" }}</span>
+      </div>
+      <div class="card-buttons">
+        <button class="btn btn-pass" data-action="pass">Pass</button>
+        <button class="btn btn-apply" data-action="apply"
+                {% if job.status in ("applying",) %}disabled{% endif %}>
+          {% if job.status == "applying" %}Applying…{% elif job.status == "apply_failed" %}Retry{% else %}Apply{% endif %}
+        </button>
+      </div>
+    </div>
+
+    {% if job.status == "apply_failed" and job.status_message %}
+    <div class="error-msg">{{ job.status_message }}</div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="empty-state">No jobs yet — click "Sync Jobs" to pull from {{ nav_sources[source].label }}.</div>
+  {% endfor %}
+</div>
+<div class="sync-overlay" id="sync-overlay" hidden>
+  <div class="spinner spinner-lg"></div>
+  <div>Syncing jobs…</div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>window.AUTO_APPLY_TAB_SOURCE = {{ source|tojson }};</script>
+{% endblock %}

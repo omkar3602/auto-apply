@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+instance/
+debug/
+browser_profiles/*/
+!browser_profiles/.gitkeep

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Auto Apply{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Auto Apply</div>
+    <nav class="tabs">
+      {% for key, meta in nav_sources.items() %}
+        <a class="tab-link {% if request.path.startswith('/jobs/' ~ key) %}active{% endif %}"
+           href="{{ url_for('jobs.tab_view', source=key) }}">{{ meta.label }}</a>
+      {% endfor %}
+      <a class="tab-link {% if request.path.startswith('/history') %}active{% endif %}"
+         href="{{ url_for('history.history') }}">History</a>
+    </nav>
+  </header>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
