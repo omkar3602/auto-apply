@@ -117,9 +117,18 @@ To stop sharing: `tailscale serve --https=443 off`.
 
 ### Notes and caveats
 
-- **Your Mac must be awake** for anything to work — it's serving the app, not
-  just the automation. Worth checking System Settings → Battery/Lock Screen
-  if it sleeps too eagerly.
+- **Works from anywhere** — cellular, hotel wifi, another country. Tailscale
+  connects your devices over the internet, not just the local network.
+- **But your Mac must be awake and online**, because it's serving the app,
+  not just running the automation. If it stays home plugged in:
+  ```bash
+  sudo pmset -c sleep 0          # never idle-sleep while on charger
+  # or, just for one session:
+  caffeinate -s python app.py    # awake only while the app runs
+  ```
+  On a MacBook, closing the lid sleeps it regardless of these settings
+  (unless it's in clamshell mode with an external display) — so leaving it
+  home *closed* won't work.
 - **Nothing is public.** Only devices signed into your tailnet can reach the
   URL, which is why there's no login screen — adding one is possible but
   redundant here.
