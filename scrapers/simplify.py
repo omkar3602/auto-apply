@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import config as cfg
 from db import db
 from models import Job
-from scrapers import common
+from scrapers import common, description_fetch
 
 REQUEST_TIMEOUT_S = 30
 
@@ -32,30 +32,40 @@ def sync_jobs(app):
 
     now_ts = datetime.now(timezone.utc).timestamp()
     created, updated, skipped, too_old = 0, 0, 0, 0
-    for entry in entries:
-        if not entry.get("active") or not entry.get("is_visible"):
-            continue
+    with description_fetch.browser_session() as fetch_description:
+        for entry in entries:
+            if not entry.get("active") or not entry.get("is_visible"):
+                continue
 
-        date_posted = entry.get("date_posted")
-        if not common.is_recent(None if date_posted is None else now_ts - date_posted):
-            too_old += 1
-            continue
+            date_posted = entry.get("date_posted")
+            if not common.is_recent(None if date_posted is None else now_ts - date_posted):
+                too_old += 1
+                continue
 
-        data = _parse_entry(entry)
-        if not data:
-            skipped += 1
-            continue
+            data = _parse_entry(entry)
+            if not data:
+                skipped += 1
+                continue
 
-        existing = Job.query.filter_by(source="simplify", external_id=data["external_id"]).first()
-        if existing and existing.status != "new":
-            skipped += 1
-            continue
+            existing = Job.query.filter_by(source="simplify", external_id=data["external_id"]).first()
+            if existing and existing.status != "new":
+                skipped += 1
+                continue
 
-        is_new = common.upsert_job("simplify", data)
-        if is_new:
-            created += 1
-        else:
-            updated += 1
+            # listings.json never has a JD (see _parse_entry). Fetch it from
+            # the application link itself - but only once per job: if we
+            # already captured one, keep it rather than let a transient
+            # fetch failure on resync wipe it back out.
+            if existing and existing.description:
+                data["description"] = existing.description
+            else:
+                data["description"] = fetch_description(data["job_url"])
+
+            is_new = common.upsert_job("simplify", data)
+            if is_new:
+                created += 1
+            else:
+                updated += 1
 
     db.session.commit()
     return {"created": created, "updated": updated, "skipped": skipped, "too_old": too_old}
@@ -86,7 +96,7 @@ def _parse_entry(entry):
         "posted_label": _relative_time(entry.get("date_posted")),
         "tags": ", ".join(dict.fromkeys(tags)),
         "job_url": url,
-        "description": None,  # listings.json has no JD field, unlike jobright
+        "description": None,  # listings.json has no JD field - sync_jobs fetches it from job_url
         "raw_json": json.dumps(entry),
     }
 

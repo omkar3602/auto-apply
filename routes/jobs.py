@@ -57,6 +57,22 @@ def pass_job(job_id):
     return jsonify({"ok": True})
 
 
+@jobs_bp.post("/<int:job_id>/undo-pass")
+def undo_pass(job_id):
+    # Only reverses a pass. Apply has a real external side effect (queued or
+    # already submitted to tsenta) that can't be safely un-submitted, so
+    # there's no undo path for it.
+    job = db.session.get(Job, job_id)
+    if job is None:
+        return jsonify({"error": "not found"}), 404
+    if job.status != "passed":
+        return jsonify({"error": "not passed"}), 409
+    job.status = "new"
+    job.status_changed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 @jobs_bp.post("/<int:job_id>/apply")
 def apply_job(job_id):
     job = db.session.get(Job, job_id)
