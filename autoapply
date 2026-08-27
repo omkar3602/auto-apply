@@ -15,7 +15,37 @@
 
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Where the project lives. This script is meant to also work from your PATH,
+# so it can't just assume its own directory is the project. In order:
+#
+#   1. $AUTOAPPLY_HOME, if you set it
+#   2. the script's real directory with symlinks followed - covers running it
+#      inside the repo, and symlinking it onto your PATH (the tidy option:
+#      one file, never goes stale)
+#   3. DEFAULT_REPO below - covers having *copied* it onto your PATH
+#
+DEFAULT_REPO="/Volumes/Personal/Projects/_NEW_August_2026/auto-apply"
+
+# macOS ships BSD readlink, which has no -f, so walk the symlinks by hand.
+resolve_self_dir() {
+  local src="${BASH_SOURCE[0]}" dir
+  while [ -L "$src" ]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+  done
+  (cd -P "$(dirname "$src")" && pwd)
+}
+
+SELF_DIR="$(resolve_self_dir)"
+if [ -n "${AUTOAPPLY_HOME:-}" ]; then
+  REPO="$AUTOAPPLY_HOME"
+elif [ -f "$SELF_DIR/app.py" ]; then
+  REPO="$SELF_DIR"
+else
+  REPO="$DEFAULT_REPO"
+fi
+
 LABEL="com.autoapply.server"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PYTHON="$REPO/.venv/bin/python"
@@ -95,8 +125,20 @@ check_port_free() {
   To run this service on a different port instead: PORT=8001 ./autoapply start"
 }
 
+require_repo() {
+  [ -f "$REPO/app.py" ] || die "can't find the project - looked in:
+    $REPO
+
+  Fix by any of:
+    export AUTOAPPLY_HOME=/path/to/auto-apply
+    symlink this script into the repo instead of copying it
+    edit DEFAULT_REPO at the top of this script"
+  [ -x "$PYTHON" ] || die "no virtualenv at $PYTHON
+  create it with: cd '$REPO' && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+}
+
 cmd_start() {
-  [ -x "$PYTHON" ] || die "no virtualenv at $PYTHON - run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  require_repo
   is_loaded || check_port_free
   write_plist
   if is_loaded; then
@@ -114,7 +156,8 @@ cmd_stop() {
 }
 
 cmd_restart() {
-  [ -f "$PLIST" ] || die "not installed yet - run: ./autoapply start"
+  [ -f "$PLIST" ] || die "not installed yet - run: autoapply start"
+  require_repo
   write_plist
   if is_loaded; then launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null; else do_bootstrap; fi
   sleep 2
@@ -122,9 +165,14 @@ cmd_restart() {
 }
 
 cmd_status() {
+  if [ -f "$REPO/app.py" ]; then
+    printf 'project:  %s\n' "$REPO"
+  else
+    printf 'project:  \033[31m%s (not found)\033[0m\n' "$REPO"
+  fi
   if ! is_loaded; then
     printf 'service:  \033[31mnot running\033[0m\n'
-    printf 'start it: ./autoapply start\n'
+    printf 'start it: autoapply start\n'
     return 0
   fi
   local pid; pid="$(service_pid || true)"

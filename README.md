@@ -180,9 +180,27 @@ The agent wraps the app in `caffeinate -s`, which holds off system sleep
 the moment the service stops your Mac sleeps normally again. Your display
 still sleeps and your screen still locks as usual.
 
-The plist is generated from the script's own location, so moving or
-renaming the project directory just works — re-run `start` and it rewrites
-itself with the new paths.
+### Running it from anywhere
+
+Symlink it into a folder that's on your `PATH`:
+
+```bash
+ln -sfn "$PWD/autoapply" ~/bin/autoapply      # or wherever you keep scripts
+```
+
+Then `autoapply start` works from any directory. **Symlink rather than
+copy** — the script follows symlinks back to the repo to locate the
+project, and a copy silently goes stale the moment the script changes.
+
+If you do copy it, it falls back to the `DEFAULT_REPO` path baked in at the
+top of the script. To point it somewhere else without editing:
+
+```bash
+export AUTOAPPLY_HOME=/path/to/auto-apply
+```
+
+`autoapply status` prints which project it resolved to, so you can always
+check what it's controlling.
 
 ### If the port is already taken
 
