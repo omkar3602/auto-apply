@@ -26,6 +26,7 @@
       <th>Title</th>
       <th>Company</th>
       <th>Source</th>
+      <th>Board</th>
       <th>Status</th>
       <th>Changed</th>
       <th></th>
@@ -37,12 +38,13 @@
       <td>{{ job.title }}</td>
       <td>{{ job.company or "—" }}</td>
       <td>{{ job.source }}</td>
+      <td><span class="badge badge-board{{ ' badge-board-unknown' if job.job_board == 'Unknown' else '' }}">{{ job.job_board }}</span></td>
       <td><span class="status-badge status-{{ job.status }}">{{ job.status }}</span></td>
-      <td>{{ job.status_changed_at.strftime("%Y-%m-%d %H:%M") if job.status_changed_at else "—" }}</td>
+      <td>{{ job.status_changed_at | local_dt or "—" }}</td>
       <td><a href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">View</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="empty-state">Nothing here yet.</td></tr>
+    <tr><td colspan="7" class="empty-state">Nothing here yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>

@@ -14,6 +14,8 @@
   <header class="topbar">
     <div class="brand">Auto Apply</div>
     <nav class="tabs">
+      <a class="tab-link {% if request.path.startswith('/swipe') %}active{% endif %}"
+         href="{{ url_for('swipe.swipe') }}">Swipe mode</a>
       {% for key, meta in nav_sources.items() %}
         <a class="tab-link {% if request.path.startswith('/jobs/' ~ key) %}active{% endif %}"
            href="{{ url_for('jobs.tab_view', source=key) }}">{{ meta.label }}</a>

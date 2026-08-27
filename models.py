@@ -3,7 +3,7 @@ from datetime import datetime
 from db import db
 from job_boards import job_board_name
 
-ACTIVE_STATUSES = ("new", "applying", "apply_failed")
+ACTIVE_STATUSES = ("new", "queued", "applying", "apply_failed")
 DECIDED_STATUSES = ("passed", "applied")
 
 

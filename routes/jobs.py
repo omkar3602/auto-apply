@@ -5,7 +5,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, ur
 from db import db
 from models import ACTIVE_STATUSES, Job
 from scrapers import SOURCES
-from automation.tasks import get_sync_status, run_apply_async, run_sync_async
+from automation.tasks import get_sync_status, run_sync_async
 
 jobs_bp = Blueprint("jobs", __name__, url_prefix="/jobs")
 
@@ -62,8 +62,12 @@ def apply_job(job_id):
     job = db.session.get(Job, job_id)
     if job is None:
         return jsonify({"error": "not found"}), 404
-    run_apply_async(current_app._get_current_object(), job_id)
-    return jsonify({"ok": True, "status": "applying"})
+    # Queues it for the background apply worker rather than driving tsenta
+    # inline - see automation/tasks.start_apply_worker.
+    job.status = "queued"
+    job.status_changed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True, "status": "queued"})
 
 
 @jobs_bp.get("/<int:job_id>/apply-status")

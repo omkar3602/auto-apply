@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Swipe mode · Auto Apply{% endblock %}
+
+{% block content %}
+<div class="swipe-page">
+  <div class="swipe-deck" id="swipe-deck">
+    {% for job in jobs %}
+    <div class="swipe-card card card-color-{{ loop.index0 % 6 }}"
+         data-job-id="{{ job.id }}"
+         data-job-url="{{ job.job_url }}"
+         style="z-index: {{ jobs|length - loop.index0 }}">
+      <div class="swipe-stamp swipe-stamp-pass">PASS</div>
+      <div class="swipe-stamp swipe-stamp-apply">APPLY</div>
+
+      <div class="card-top">
+        {% if job.location %}<div class="location">{{ job.location }}</div>{% endif %}
+        <div class="badge-row">
+          <span class="badge badge-board{{ ' badge-board-unknown' if job.job_board == 'Unknown' else '' }}">{{ job.job_board }}</span>
+          {% if job.work_mode %}<span class="badge">{{ job.work_mode }}</span>{% endif %}
+          {% if job.posted_label %}<span class="posted">{{ job.posted_label }}</span>{% endif %}
+        </div>
+      </div>
+
+      <div class="swipe-title">{{ job.title }}</div>
+
+      {% set tags = job.tag_list() %}
+      {% if tags %}
+      <div class="tags">
+        {% for tag in tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="swipe-body">
+        {% if job.description %}
+        <div class="description">{{ job.description }}</div>
+        {% else %}
+        <div class="description description-empty">No job description available for this listing.</div>
+        {% endif %}
+      </div>
+
+      <div class="card-footer">
+        <div class="company">
+          <span class="company-avatar">{{ (job.company or "?")[0]|upper }}</span>
+          <span class="company-name">{{ job.company or "Unknown company" }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="swipe-empty" id="swipe-empty" {% if jobs %}hidden{% endif %}>
+    No jobs left to review — sync a tab to pull in more.
+  </div>
+
+  <div class="swipe-controls">
+    <button class="swipe-btn swipe-btn-pass" id="swipe-pass-btn" type="button" aria-label="Pass">✕</button>
+    <a class="swipe-btn swipe-btn-link" id="swipe-link-btn" href="#" target="_blank" rel="noopener" aria-label="Open listing">↗</a>
+    <button class="swipe-btn swipe-btn-apply" id="swipe-apply-btn" type="button" aria-label="Apply">♥</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/swipe.js') }}"></script>
+{% endblock %}

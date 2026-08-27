@@ -41,7 +41,7 @@
     const overlay = cardOverlay(button);
     const poll = () => {
       get(`/jobs/${jobId}/apply-status`).then((data) => {
-        if (data.status === "applying") {
+        if (data.status === "queued" || data.status === "applying") {
           setTimeout(poll, 3000);
           return;
         }
@@ -80,7 +80,7 @@
     }
 
     if (btn.dataset.action === "apply") {
-      setButtonLoading(btn, "Applying…");
+      setButtonLoading(btn, "Queued…");
       const overlay = cardOverlay(btn);
       if (overlay) overlay.hidden = false;
       post(`/jobs/${jobId}/apply`).then(() => pollApplyStatus(jobId, btn));

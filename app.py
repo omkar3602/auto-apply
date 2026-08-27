@@ -1,13 +1,17 @@
 import os
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 from flask import Flask, redirect, url_for
 
+from automation.tasks import start_apply_worker
 from config import Config
 from db import db
 from routes import register_blueprints
 from scrapers import SOURCES
 
 DEFAULT_SOURCE = next(iter(SOURCES))
+DISPLAY_TZ = ZoneInfo("America/New_York")
 
 
 def create_app():
@@ -19,14 +23,23 @@ def create_app():
         db.create_all()
 
     register_blueprints(app)
+    start_apply_worker(app)
 
     @app.route("/")
     def index():
-        return redirect(url_for("jobs.tab_view", source=DEFAULT_SOURCE))
+        return redirect(url_for("swipe.swipe"))
 
     @app.context_processor
     def inject_sources():
         return {"nav_sources": SOURCES, "default_source": DEFAULT_SOURCE}
+
+    @app.template_filter("local_dt")
+    def local_dt(value, fmt="%Y-%m-%d %H:%M"):
+        # Columns are stored as naive UTC (datetime.utcnow()); attach that
+        # before converting, or astimezone() would assume local time instead.
+        if value is None:
+            return None
+        return value.replace(tzinfo=timezone.utc).astimezone(DISPLAY_TZ).strftime(fmt)
 
     return app
 

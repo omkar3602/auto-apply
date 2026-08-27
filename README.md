@@ -30,7 +30,7 @@ playwright install chrome
 python app.py
 ```
 
-Visit http://localhost:5000 — it redirects to the JobRight tab.
+Visit http://localhost:8000 — it redirects to the JobRight tab.
 
 ## First run: logging in
 

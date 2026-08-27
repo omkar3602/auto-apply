@@ -9,8 +9,8 @@
   <div class="detail-meta">
     {% if job.company %}<span>{{ job.company }}</span>{% endif %}
     {% if job.location %}<span>{{ job.location }}</span>{% endif %}
+    <span class="badge badge-board{{ ' badge-board-unknown' if job.job_board == 'Unknown' else '' }}">{{ job.job_board }}</span>
     {% if job.work_mode %}<span class="badge">{{ job.work_mode }}</span>{% endif %}
-    <span class="badge badge-board">{{ job.job_board }}</span>
     {% if job.posted_label %}<span>{{ job.posted_label }}</span>{% endif %}
   </div>
 
