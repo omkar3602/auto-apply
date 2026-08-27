@@ -154,15 +154,25 @@ Running `python app.py` in a terminal also dies when you close that window
 or log out. The fix for both is a `launchd` agent, which is macOS's native
 way to run something in the background.
 
-### Install
+Use the `./autoapply` script — one command, no `launchctl` incantations:
 
 ```bash
-cp tools/com.autoapply.server.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.autoapply.server.plist
+./autoapply start        # install + start; survives screen lock and logout
+./autoapply status       # running? on what PID? responding? phone URL?
+./autoapply restart      # pick up code changes
+./autoapply logs         # tail output + error logs
+./autoapply stop
+./autoapply uninstall    # stop and remove the agent
 ```
 
-That's it. The app now starts at login, restarts itself if it crashes, and
-survives screen locks and terminal closes.
+`start` installs a `launchd` agent, so the app comes back at login and
+restarts itself if it ever crashes. `status` prints something like:
+
+```
+service:  running (pid 46280)
+http:     responding on http://127.0.0.1:8000
+phone:    https://your-mac.your-tailnet.ts.net
+```
 
 The agent wraps the app in `caffeinate -s`, which holds off system sleep
 **only while the app is running, and only on AC power** — precisely the
@@ -170,18 +180,23 @@ The agent wraps the app in `caffeinate -s`, which holds off system sleep
 the moment the service stops your Mac sleeps normally again. Your display
 still sleeps and your screen still locks as usual.
 
-### Managing it
+The plist is generated from the script's own location, so moving or
+renaming the project directory just works — re-run `start` and it rewrites
+itself with the new paths.
 
-```bash
-launchctl list | grep autoapply       # is it running? (shows PID)
-tail -f /tmp/autoapply.log            # app output
-tail -f /tmp/autoapply.err.log        # errors
+### If the port is already taken
 
-launchctl unload ~/Library/LaunchAgents/com.autoapply.server.plist   # stop
-launchctl load   ~/Library/LaunchAgents/com.autoapply.server.plist   # start
+Running the app by hand *and* as a service will collide — only one can hold
+port 8000. `start` detects this and tells you which process to stop rather
+than failing silently:
+
+```
+error: port 8000 is already in use by pid 44054:
+    .../Python app.py
 ```
 
-To restart after changing code, unload then load.
+Stop the manual one (Ctrl+C in its terminal), then `./autoapply start`.
+Or run the service somewhere else: `PORT=8001 ./autoapply start`.
 
 ### Caveats
 

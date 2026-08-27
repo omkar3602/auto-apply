@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+#
+# Control script for the Auto Apply background service.
+#
+#   ./autoapply start      install + start (survives screen lock / logout)
+#   ./autoapply stop       stop it
+#   ./autoapply restart    pick up code changes
+#   ./autoapply status     running? on what PID? responding?
+#   ./autoapply logs       tail the output and error logs
+#   ./autoapply uninstall  stop and remove the launchd agent
+#
+# The launchd plist is generated from this script's own location, so moving
+# or renaming the project directory just works - re-run `start` and it
+# rewrites itself with the new paths.
+
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LABEL="com.autoapply.server"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+PYTHON="$REPO/.venv/bin/python"
+PORT="${PORT:-8000}"
+DOMAIN="gui/$(id -u)"
+OUT_LOG="/tmp/autoapply.log"
+ERR_LOG="/tmp/autoapply.err.log"
+
+die() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
+info() { printf '\033[32m==>\033[0m %s\n' "$1"; }
+
+write_plist() {
+  mkdir -p "$(dirname "$PLIST")"
+  # caffeinate -s defers system sleep only while the app runs, and only on
+  # AC power - the "plugged in, screen locked" case. No permanent pmset
+  # change, and normal sleep resumes the moment this stops.
+  cat > "$PLIST" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$LABEL</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>$PYTHON</string>
+        <string>$REPO/app.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>$REPO</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PORT</key>
+        <string>$PORT</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>$OUT_LOG</string>
+    <key>StandardErrorPath</key>
+    <string>$ERR_LOG</string>
+</dict>
+</plist>
+PLIST_EOF
+  plutil -lint "$PLIST" >/dev/null || die "generated plist is invalid"
+}
+
+is_loaded() { launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; }
+
+# `bootout`/`bootstrap` are the modern form; fall back to load/unload on
+# older macOS where they aren't available.
+do_bootstrap() { launchctl bootstrap "$DOMAIN" "$PLIST" 2>/dev/null || launchctl load "$PLIST"; }
+do_bootout()   { launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || launchctl unload "$PLIST" 2>/dev/null || true; }
+
+service_pid() {
+  launchctl print "$DOMAIN/$LABEL" 2>/dev/null | awk '/^\tpid = /{print $3; exit}'
+}
+
+# Something already on the port that isn't our service means launchd would
+# bind-fail and silently retry every ThrottleInterval forever. Catch it here
+# and say so instead.
+check_port_free() {
+  local holder
+  holder="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
+  [ -n "$holder" ] || return 0
+  die "port $PORT is already in use by pid $holder:
+    $(ps -p "$holder" -o command= 2>/dev/null)
+
+  That's probably the app already running by hand. Stop it (Ctrl+C in its
+  terminal, or: kill $holder) and re-run './autoapply start', which will
+  keep it running for you from then on.
+  To run this service on a different port instead: PORT=8001 ./autoapply start"
+}
+
+cmd_start() {
+  [ -x "$PYTHON" ] || die "no virtualenv at $PYTHON - run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  is_loaded || check_port_free
+  write_plist
+  if is_loaded; then
+    info "already loaded - restarting to pick up any changes"
+    launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null
+  else
+    do_bootstrap
+  fi
+  sleep 2
+  cmd_status
+}
+
+cmd_stop() {
+  if is_loaded; then do_bootout; info "stopped"; else info "not running"; fi
+}
+
+cmd_restart() {
+  [ -f "$PLIST" ] || die "not installed yet - run: ./autoapply start"
+  write_plist
+  if is_loaded; then launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null; else do_bootstrap; fi
+  sleep 2
+  cmd_status
+}
+
+cmd_status() {
+  if ! is_loaded; then
+    printf 'service:  \033[31mnot running\033[0m\n'
+    printf 'start it: ./autoapply start\n'
+    return 0
+  fi
+  local pid; pid="$(service_pid || true)"
+  printf 'service:  \033[32mrunning\033[0m%s\n' "${pid:+ (pid $pid)}"
+
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:$PORT/jobs/jobright" || true)"
+  if [ "$code" = "200" ]; then
+    printf 'http:     \033[32mresponding\033[0m on http://127.0.0.1:%s\n' "$PORT"
+  else
+    printf 'http:     \033[31mnot responding\033[0m on port %s (HTTP %s) - check: ./autoapply logs\n' "$PORT" "${code:-none}"
+  fi
+
+  if command -v tailscale >/dev/null 2>&1; then
+    local ts; ts="$(tailscale serve status 2>/dev/null | grep -oE 'https://[^ ]+' | head -1 || true)"
+    [ -n "$ts" ] && printf 'phone:    %s\n' "$ts" \
+                 || printf 'phone:    not shared - run: tailscale serve --bg %s\n' "$PORT"
+  fi
+}
+
+cmd_logs() {
+  info "tailing $OUT_LOG and $ERR_LOG (Ctrl+C to stop)"
+  touch "$OUT_LOG" "$ERR_LOG"
+  tail -f "$OUT_LOG" "$ERR_LOG"
+}
+
+cmd_uninstall() {
+  cmd_stop
+  rm -f "$PLIST"
+  info "removed $PLIST"
+}
+
+case "${1:-}" in
+  start)     cmd_start ;;
+  stop)      cmd_stop ;;
+  restart)   cmd_restart ;;
+  status)    cmd_status ;;
+  logs)      cmd_logs ;;
+  uninstall) cmd_uninstall ;;
+  *)
+    sed -n '3,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    exit 1 ;;
+esac
