@@ -301,8 +301,8 @@ body {
   opacity: 0;
   pointer-events: none;
 }
-.swipe-stamp-pass { left: 5%; color: #b3261e; border-color: #b3261e; transform: rotate(-18deg); }
-.swipe-stamp-apply { right: 5%; color: #1e7a3e; border-color: #1e7a3e; transform: rotate(18deg); }
+.swipe-stamp-pass { right: 5%; color: #b3261e; border-color: #b3261e; transform: rotate(18deg); }
+.swipe-stamp-apply { left: 5%; color: #1e7a3e; border-color: #1e7a3e; transform: rotate(-18deg); }
 
 .swipe-title {
   padding: 10px 16px 0;

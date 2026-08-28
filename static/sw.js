@@ -3,7 +3,7 @@
 // network since job data is live and must never be served stale. Registered
 // only on a real hosted domain (see base.html) - never on localhost, so
 // local dev is unaffected by any of this.
-const CACHE_NAME = "auto-apply-shell-v6";
+const CACHE_NAME = "auto-apply-shell-v7";
 const SHELL_ASSETS = [
   "/static/css/style.css",
   "/static/js/app.js",
