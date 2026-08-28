@@ -339,7 +339,14 @@ body {
   padding: 60px 20px;
 }
 
-.swipe-controls { display: flex; align-items: center; justify-content: center; gap: 20px; }
+.swipe-controls { width: 100%; max-width: 460px; display: flex; align-items: center; justify-content: center; }
+/* position: relative + absolutely-positioning undo out of the flex flow
+   means pass/link/apply's centering is computed as if undo didn't exist -
+   resizing/repositioning undo never shifts them. Anchoring undo to this
+   group's own left edge (rather than .swipe-controls's, which is wider and
+   varies by breakpoint) keeps its distance from the pass button constant
+   across desktop and phone instead of the gap changing with page width. */
+.swipe-controls-main { position: relative; display: flex; align-items: center; justify-content: center; gap: 20px; }
 .swipe-btn {
   width: 84px;
   height: 84px;
@@ -358,7 +365,17 @@ body {
 .swipe-btn-pass { color: #b3261e; }
 .swipe-btn-apply { color: #1e7a3e; }
 .swipe-btn-link { width: 56px; height: 56px; font-size: 17px; color: var(--muted); align-self: center; }
-.swipe-btn-undo { width: 44px; height: 44px; font-size: 19px; color: var(--muted); align-self: center; }
+.swipe-btn-undo {
+  position: absolute;
+  right: 100%;
+  margin-right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  color: var(--muted);
+}
 
 /* Detail page */
 .detail-page { max-width: 720px; }
@@ -440,4 +457,6 @@ body {
     flex: 1 1 auto;
     min-height: 0;
   }
+
+  .swipe-btn-undo { width: 38px; height: 38px; font-size: 16px; }
 }
