@@ -46,6 +46,20 @@ body {
 .tab-link.active { background: #111; color: #fff; }
 .tab-link:hover:not(.active) { background: #f0f0f0; }
 
+.notif-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  font-size: 19px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.notif-btn:hover { background: #f0f0f0; }
+.notif-btn[hidden] { display: none; }
+
 .content { padding: 24px 32px 64px; max-width: 1400px; margin: 0 auto; }
 
 .tab-header {

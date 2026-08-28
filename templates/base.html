@@ -23,6 +23,7 @@
       <a class="tab-link {% if request.path.startswith('/history') %}active{% endif %}"
          href="{{ url_for('history.history') }}">History</a>
     </nav>
+    <button id="notif-btn" class="notif-btn" type="button" hidden></button>
   </header>
   <main class="content">
     {% block content %}{% endblock %}
@@ -32,9 +33,20 @@
     // Only register on a real hosted domain - never on localhost, so local
     // `python app.py` dev never picks up a service worker or its caching.
     if ("serviceWorker" in navigator && !["localhost", "127.0.0.1"].includes(location.hostname)) {
-      navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
+      navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      // One-time cleanup: an earlier version registered the worker from
+      // /static/sw.js, which defaults to scope "/static/" - it never
+      // controlled real pages, so serviceWorker.ready (which push
+      // subscribe/unsubscribe wait on) never resolved on them. Drop that
+      // stale registration wherever it's still hanging around.
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => {
+          if (reg.scope.endsWith("/static/")) reg.unregister();
+        });
+      });
     }
   </script>
+  <script src="{{ url_for('static', filename='js/push.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

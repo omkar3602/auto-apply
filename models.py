@@ -56,3 +56,18 @@ class Job(db.Model):
             "status": self.status,
             "status_message": self.status_message,
         }
+
+
+class PushSubscription(db.Model):
+    """One row per browser/device the user enabled reminders on (a PWA
+    reinstall or a second device just adds another row - endpoint is unique
+    per subscription, so re-subscribing the same one updates in place).
+    """
+
+    __tablename__ = "push_subscriptions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    endpoint = db.Column(db.Text, unique=True, nullable=False)
+    p256dh = db.Column(db.Text, nullable=False)
+    auth = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
