@@ -1,7 +1,8 @@
 # TODO
 
 ## Pending
-- [ ] Add Linkedin reach out feature (different from current use-case)
+- [ ] Make the "Status:" text in the job details page, history page more user friendly (less programmatic)
+- [ ] Actually check if job was applied on tsenta or not. If not show it in failed applications in the history. (need to create this status)
 
 ## Parked
 - Fly.io hosted deployment + local automation agent: branch `hosted-fly-agent`, see its `BRANCH-NOTES.md`. Complete and locally tested (agent round-trip, auth, gunicorn without Playwright), never deployed. Parked because Tailscale keeps the backend on the Mac and makes the whole agent split unnecessary.

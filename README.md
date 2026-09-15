@@ -1,8 +1,11 @@
 # Auto Apply
 
-Local Flask app that pulls job listings from multiple boards into a database,
-shows them as cards you can Pass or Apply on (one tab per board), and hands
-"Apply" off to tsenta.com's "Add Your Own" flow via browser automation.
+Local Flask app that pulls job listings from multiple boards into a database
+and lets you triage them either as per-board card tabs or Tinder-style in
+**Swipe mode** (the default landing page - drag or flick a card, or use the
+✕/♥ buttons/arrow keys; a small undo button reverses your last Pass). Either
+way, "Apply" hands off to tsenta.com's "Add Your Own" flow via browser
+automation - see [Applying](#applying) below for how that's queued.
 
 Job boards wired up so far:
 - **JobRight** (`scrapers/jobright.py`) — scrapes jobright.ai's logged-in
@@ -10,10 +13,17 @@ Job boards wired up so far:
 - **Simplify New Grad** (`scrapers/simplify.py`) — reads the structured
   `listings.json` published by
   [SimplifyJobs/New-Grad-Positions](https://github.com/SimplifyJobs/New-Grad-Positions)'s
-  bot. No login, no browser automation - just a plain HTTP fetch. Currently
-  ~3,100 active listings across all categories (Software, Hardware, Quant,
-  etc.) - re-syncing is cheap so there's no harm clicking it often, but expect
-  the tab to be long.
+  bot - no login needed for that part. It has no job-description field
+  though, so for each listing the sync also opens the real application URL
+  (Workday/Greenhouse/Lever/Ashby/iCIMS/SmartRecruiters/Workable/BambooHR, or
+  a generic fallback) in a throwaway headless Chrome tab and scrapes the
+  description from there (`scrapers/description_fetch.py`); a failure there
+  just leaves the description blank rather than failing the sync, and a
+  description already captured is never re-fetched on a later sync. That
+  makes a sync with many new listings noticeably slower than a plain JSON
+  fetch - a first-time backfill across an existing "new" queue took ~12
+  minutes in practice. Currently ~3,100 active listings across all
+  categories (Software, Hardware, Quant, etc.)
 
 ## Setup
 
@@ -30,7 +40,8 @@ playwright install chrome
 python app.py
 ```
 
-Visit http://localhost:8000 — it redirects to the JobRight tab.
+Visit http://localhost:8000 — it redirects to Swipe mode. The per-board tabs
+(JobRight, Simplify New Grad) and History are in the top nav.
 
 ## First run: logging in
 
@@ -63,11 +74,52 @@ to `debug/` at each step - `debug/jobright_*.png` / `debug/tsenta_*.png` show
 exactly what the browser saw, so a fix can be aimed rather than guessed.
 `scrapers/simplify.py` has no such fragility - it's just JSON.
 
+## Applying
+
+Clicking Apply (or swiping right) doesn't drive tsenta inline - it just marks
+the job `queued` and returns immediately. A single background thread
+(`automation/tasks.start_apply_worker`) drains that queue oldest-first, one
+job at a time, since tsenta automation can only safely run one browser
+session against its profile at once. If the app gets killed or restarts
+mid-apply, any job stuck `applying` at startup is flagged `apply_failed`
+with an explanatory message rather than silently retried - it's not safe to
+guess whether tsenta actually got the submission before the crash, so it's
+left for you to check tsenta and hit Retry if needed.
+
+## Daily apply reminder (Web Push)
+
+A bell button in the top nav (hidden on `localhost`, same gate as the
+service worker below) lets you opt into a daily "time to apply" push
+notification at 11:00 AM America/New_York (`automation/reminders.py`,
+DST-safe). Tapping it asks for notification permission and subscribes;
+`automation/push.py` self-generates a VAPID keypair the first time it's
+needed (`instance/vapid_private.pem`, gitignored) - no third-party push
+provider account required.
+
+One thing that isn't optional: Apple's web push service rejects the VAPID
+contact claim if it looks fake (`mailto:...@localhost`) with a
+`403 BadJwtToken` error, so notifications need a real contact set via the
+`VAPID_CONTACT_EMAIL` env var (`mailto:you@example.com`) to actually reach
+an iPhone - Chrome/FCM doesn't care, Apple does. The `autoapply` script
+already bakes a value in as a fixed string in the plist it generates
+(alongside `PORT`/`TZ`), so `./autoapply start` has it covered - to change
+it, edit that string directly in the script (it's not read from your shell
+environment the way `PORT` is). Running `python app.py` by hand instead of
+through `autoapply` won't have it set at all unless you `export` it
+yourself first, and falls back to a non-functional placeholder.
+
+On iOS specifically, push only works from an installed home-screen PWA
+(Safari tab push doesn't support it, iOS 16.4+ only) served over real HTTPS
+- Tailscale (below), not `localhost`.
+
 ## Data model
 
 Single `jobs` table (`models.py`). `status` drives everything:
-- `new` / `applying` / `apply_failed` → shown on the source's tab
+- `new` / `queued` / `applying` / `apply_failed` → shown on the source's tab
 - `passed` / `applied` → shown on `/history`
+
+A second table, `push_subscriptions`, holds one row per browser/device
+that's opted into the daily reminder above.
 
 ## Adding another job board later
 
@@ -233,3 +285,11 @@ Or run the service somewhere else: `PORT=8001 ./autoapply start`.
   interactive debugger can execute code. Tracebacks still land in
   `/tmp/autoapply.err.log`. For the in-browser debugger while developing
   locally, run `AUTO_APPLY_DEBUG=true python app.py` by hand instead.
+- **`restart` doesn't reload environment variable changes.** It calls
+  `launchctl kickstart -k`, which restarts the process but reuses launchd's
+  already-loaded job definition rather than re-reading the plist file - so
+  editing `PORT`/`VAPID_CONTACT_EMAIL`/etc. and running `restart` silently
+  keeps the old values. Code changes (Python/templates/static files) *are*
+  picked up fine, since those are just read fresh off disk on the next
+  request/process start. For an env var change, do a full reload instead:
+  `./autoapply stop && ./autoapply start`.

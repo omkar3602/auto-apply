@@ -67,7 +67,12 @@ def sync_jobs(app):
             else:
                 updated += 1
 
-    db.session.commit()
+            # Commit per job instead of once at the end: fetch_description
+            # above opens the real posting in a browser tab, so one
+            # transaction around the whole run would hold SQLite's write lock
+            # for the entire sync (~12 min on a cold backfill) and lock out
+            # the apply worker.
+            db.session.commit()
     return {"created": created, "updated": updated, "skipped": skipped, "too_old": too_old}
 
 

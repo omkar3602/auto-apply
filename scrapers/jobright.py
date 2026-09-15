@@ -114,7 +114,11 @@ def sync_jobs(app):
                 else:
                     updated += 1
 
-            db.session.commit()
+                # Commit per job instead of once at the end. _fetch_detail_info
+                # above drives the browser, so batching the whole feed into one
+                # transaction keeps SQLite's single write lock held for minutes
+                # and starves every other writer - the apply worker included.
+                db.session.commit()
             return {
                 "found": len(basics),
                 "created": created,
