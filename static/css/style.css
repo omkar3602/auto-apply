@@ -389,7 +389,7 @@ body {
 .detail-actions { margin-top: 20px; }
 
 /* History */
-.filters { display: flex; gap: 12px; margin-bottom: 16px; }
+.filters { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .filters select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); }
 .history-table { width: 100%; border-collapse: collapse; background: #fff; }
 .history-table th, .history-table td {
@@ -398,6 +398,7 @@ body {
   border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
+.history-table th:first-child, .history-table td:first-child { width: 1%; padding-right: 0; }
 .status-badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .status-applied { background: #d7f5e3; }
 .status-passed { background: #eee; color: var(--muted); }

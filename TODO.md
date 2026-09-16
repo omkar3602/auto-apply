@@ -1,8 +1,8 @@
 # TODO
 
 ## Pending
-- [ ] Make the "Status:" text in the job details page, history page more user friendly (less programmatic)
 - [ ] Actually check if job was applied on tsenta or not. If not show it in failed applications in the history. (need to create this status)
+- [ ] Add email reach out feature (different from current use-case)
 
 ## Parked
 - Fly.io hosted deployment + local automation agent: branch `hosted-fly-agent`, see its `BRANCH-NOTES.md`. Complete and locally tested (agent round-trip, auth, gunicorn without Playwright), never deployed. Parked because Tailscale keeps the backend on the Mac and makes the whole agent split unnecessary.
@@ -31,3 +31,5 @@
     2. `app.logger.info(...)` was silently dropped app-wide (no logging config set a handler/level) - added `logging.basicConfig(level=logging.INFO)`, so sync/apply/reminder results are now actually visible in the log.
     3. Apple's push service rejects the VAPID `sub` claim if it looks fake (`mailto:...@localhost`) with `403 BadJwtToken` - Chrome/FCM didn't care, Apple did. Set via `VAPID_CONTACT_EMAIL` in the `autoapply` plist (same mechanism as `PORT`/`TZ`), not hardcoded into committed source.
   - **Known gotcha for future env var changes**: `./autoapply restart` calls `launchctl kickstart -k`, which restarts the process but does **not** make launchd re-read the plist file - env var changes silently don't take effect until a full `./autoapply stop && ./autoapply start` (or `uninstall` + `start`). Bit us mid-testing; worth fixing in the script itself at some point.
+- [x] Human-friendly status text: `Job.status_label` (`models.py`) maps raw statuses (`apply_failed`, ...) to display text ("Apply Failed", ...); used on the job detail page and the History badges instead of the raw programmatic value. History's status filter and CSS badge classes still key off the raw `status` string.
+- [x] Export selected job links from History: a checkbox per row (+ select-all) and an "Export Selected Links" button that downloads the checked rows as a CSV (`Company,Opening link` columns, RFC 4180 field quoting) - client-side only (`static/js/history.js`), no server round-trip.

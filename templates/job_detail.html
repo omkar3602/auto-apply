@@ -33,14 +33,14 @@
   {% endif %}
 
   <div class="detail-status">
-    Status: <strong>{{ job.status }}</strong>
+    Status: <strong>{{ job.status_label }}</strong>
     {% if job.status_message %}<span class="error-msg">{{ job.status_message }}</span>{% endif %}
   </div>
 
   <div class="detail-actions card-buttons" data-job-id="{{ job.id }}">
     <button class="btn btn-pass" data-action="pass">Pass</button>
-    <button class="btn btn-apply" data-action="apply" {% if job.status == "applying" %}disabled{% endif %}>
-      {% if job.status == "applying" %}Applying…{% elif job.status == "apply_failed" %}Retry{% else %}Apply{% endif %}
+    <button class="btn btn-apply" data-action="apply" {% if job.status in ("queued", "applying") %}disabled{% endif %}>
+      {% if job.status == "queued" %}Queued…{% elif job.status == "applying" %}Applying…{% elif job.status == "apply_failed" %}Retry{% else %}Apply{% endif %}
     </button>
   </div>
 </div>

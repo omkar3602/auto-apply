@@ -6,6 +6,15 @@ from job_boards import job_board_name
 ACTIVE_STATUSES = ("new", "queued", "applying", "apply_failed")
 DECIDED_STATUSES = ("passed", "applied")
 
+STATUS_LABELS = {
+    "new": "New",
+    "queued": "Queued",
+    "applying": "Applying…",
+    "apply_failed": "Apply Failed",
+    "passed": "Passed",
+    "applied": "Applied",
+}
+
 
 class Job(db.Model):
     __tablename__ = "jobs"
@@ -40,6 +49,10 @@ class Job(db.Model):
     @property
     def job_board(self):
         return job_board_name(self.job_url)
+
+    @property
+    def status_label(self):
+        return STATUS_LABELS.get(self.status) or self.status.replace("_", " ").title()
 
     def to_dict(self):
         return {

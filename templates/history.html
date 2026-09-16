@@ -18,11 +18,13 @@
     <option value="applied" {% if selected_status == "applied" %}selected{% endif %}>Applied</option>
     <option value="passed" {% if selected_status == "passed" %}selected{% endif %}>Passed</option>
   </select>
+  <button type="button" class="btn btn-secondary" id="export-links-btn" disabled>Export Selected Links</button>
 </form>
 
-<table class="history-table">
+<table class="history-table" id="history-table">
   <thead>
     <tr>
+      <th><input type="checkbox" id="select-all-jobs" aria-label="Select all"></th>
       <th>Title</th>
       <th>Company</th>
       <th>Source</th>
@@ -35,17 +37,22 @@
   <tbody>
     {% for job in jobs %}
     <tr>
+      <td><input type="checkbox" class="job-select" value="{{ job.job_url }}" data-company="{{ job.company or '' }}" aria-label="Select {{ job.title }}"></td>
       <td>{{ job.title }}</td>
       <td>{{ job.company or "—" }}</td>
       <td>{{ job.source }}</td>
       <td><span class="badge badge-board{{ ' badge-board-unknown' if job.job_board == 'Unknown' else '' }}">{{ job.job_board }}</span></td>
-      <td><span class="status-badge status-{{ job.status }}">{{ job.status }}</span></td>
+      <td><span class="status-badge status-{{ job.status }}">{{ job.status_label }}</span></td>
       <td>{{ job.status_changed_at | local_dt or "—" }}</td>
       <td><a href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">View</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="empty-state">Nothing here yet.</td></tr>
+    <tr><td colspan="8" class="empty-state">Nothing here yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
 {% endblock %}
