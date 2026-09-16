@@ -24,7 +24,7 @@ set -euo pipefail
 #      one file, never goes stale)
 #   3. DEFAULT_REPO below - covers having *copied* it onto your PATH
 #
-DEFAULT_REPO="/Volumes/Personal/Projects/_NEW_August_2026/auto-apply"
+DEFAULT_REPO="/Volumes/Personal/Projects/_NEW_August_2026/job-automation/auto-apply"
 
 # macOS ships BSD readlink, which has no -f, so walk the symlinks by hand.
 resolve_self_dir() {
