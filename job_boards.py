@@ -24,6 +24,7 @@ JOB_BOARD_DOMAINS = [
     ("recruitee.com", "Recruitee"),
     ("workable.com", "Workable"),
     ("jazzhr.com", "JazzHR"),
+    ("applytojob.com", "JazzHR"),  # JazzHR's actual posting domain (<company>.applytojob.com) - jazzhr.com itself isn't used by real postings
     ("ultipro.com", "UKG/UltiPro"),
     ("phenompeople.com", "Phenom"),
     ("linkedin.com", "LinkedIn"),

@@ -32,6 +32,7 @@ KNOWN_SELECTORS = [
     ("smartrecruiters.com", "#st-jobDescription"),
     ("workable.com", '[data-ui="job-description"]'),
     ("bamboohr.com", "#jobDescriptionText"),
+    ("applytojob.com", "#job-description"),  # JazzHR
 ]
 
 
