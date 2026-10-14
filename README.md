@@ -27,6 +27,10 @@ Job boards wired up so far:
 
 ## Setup
 
+Needs **Python 3.10+** (the `mcp` package - used for the Dice/ZipRecruiter/
+Indeed/Tsenta integrations - won't install on anything older). macOS's
+bundled Python 3.9 isn't enough; use a Homebrew/python.org install instead.
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate

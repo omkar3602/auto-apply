@@ -60,6 +60,33 @@ def _sync_lock(source):
     return _LOCKS.setdefault(source, threading.Lock())
 
 
+def _do_sync(app, source):
+    """The actual sync-with-locking-and-status-tracking logic, shared by the
+    fire-and-forget `run_sync_async` (wraps this in its own thread + app
+    context) and the blocking `run_sync_sync` (runs inline for a caller -
+    the scheduled auto-apply run - that's already on its own thread with
+    its own app context and needs the sync to have actually finished before
+    moving on, not raced). Swallows sync errors into `_sync_status` either
+    way; only `run_sync_sync` re-raises, since it has a caller that needs to
+    know.
+    """
+    with _sync_lock(source):
+        _sync_status[source]["state"] = "running"
+        try:
+            result = SOURCES[source]["sync"](app)
+            _sync_status[source]["last_result"] = result
+            app.logger.info("[%s] sync finished: %s", source, result)
+            return result
+        except Exception as e:
+            db.session.rollback()
+            app.logger.exception("[%s] sync failed", source)
+            _sync_status[source]["last_result"] = {"error": str(e)}
+            raise
+        finally:
+            _sync_status[source]["state"] = "idle"
+            _sync_status[source]["last_synced_at"] = datetime.utcnow().isoformat()
+
+
 def run_sync_async(app, source):
     if source not in SOURCES:
         raise ValueError(f"Unknown source: {source}")
@@ -67,22 +94,24 @@ def run_sync_async(app, source):
         return
 
     def worker():
-        with _sync_lock(source):
-            _sync_status[source]["state"] = "running"
-            with app.app_context():
-                try:
-                    result = SOURCES[source]["sync"](app)
-                    _sync_status[source]["last_result"] = result
-                    app.logger.info("[%s] sync finished: %s", source, result)
-                except Exception as e:
-                    db.session.rollback()
-                    app.logger.exception("[%s] sync failed", source)
-                    _sync_status[source]["last_result"] = {"error": str(e)}
-                finally:
-                    _sync_status[source]["state"] = "idle"
-                    _sync_status[source]["last_synced_at"] = datetime.utcnow().isoformat()
+        with app.app_context():
+            try:
+                _do_sync(app, source)
+            except Exception:
+                pass  # already recorded in _sync_status by _do_sync
 
     threading.Thread(target=worker, daemon=True).start()
+
+
+def run_sync_sync(app, source):
+    """Blocking version of `run_sync_async`: runs the sync inline and
+    returns its result (or raises) instead of spawning a thread. The caller
+    must already be inside an app context (the scheduled auto-apply run
+    always is - see automation/auto_apply_schedule.py).
+    """
+    if source not in SOURCES:
+        raise ValueError(f"Unknown source: {source}")
+    return _do_sync(app, source)
 
 
 def _flag_orphaned_applying(app):

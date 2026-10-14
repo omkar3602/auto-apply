@@ -13,7 +13,22 @@ Confirmed flow (from screenshots of the real UI):
 
 Every step dumps a debug snapshot (debug/tsenta_*.png/html) so a failure at
 any point can be inspected without re-running blind.
+
+Confirmed by a real run (2026-10-08): tsenta can't auto-detect an ATS or
+fetch a JD through an indirect redirect link like zapplyjobs' own
+`zapply.jobs/l/d/...` apply URLs - it shows a red "We couldn't detect a
+supported application system on this page... Choosing the wrong system
+will fail" notice instead, and clicking "Apply with Optimized Resume" past
+that point does not actually submit anything real (verified against
+tsenta's own Applications pipeline - none of 8 such "successful" submits
+showed up there). Fixed two ways: `_resolve_zapply_redirect` follows the
+redirect to the real employer URL before handing it to tsenta, and
+`_submit_link` now checks for that error notice and reports failure
+instead of blindly clicking Apply and assuming success.
 """
+
+import urllib.request
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -24,17 +39,43 @@ ADD_OWN_BUTTON_TEXT = "Add your own"
 MODAL_HEADING_TEXT = "Add Your Own Link"
 FETCH_JD_BUTTON_TEXT = "Fetch JD"
 APPLY_BUTTON_TEXT = "Apply with Optimized Resume"
+NO_ATS_DETECTED_TEXT = "couldn't detect a supported application system"
 JD_WAIT_TIMEOUT_S = 60
+
+ZAPPLY_REDIRECT_HOST = "zapply.jobs"
+REDIRECT_RESOLVE_TIMEOUT_S = 15
 
 
 def _looks_like_dashboard(page):
     return page.get_by_text(ADD_OWN_BUTTON_TEXT, exact=False).count() > 0
 
 
+def _resolve_zapply_redirect(job_url):
+    """zapplyjobs' "Apply" links are a `zapply.jobs/l/d/...` redirect to the
+    real employer posting, not the posting itself - tsenta needs the real
+    URL to detect an ATS/fetch a JD. Scoped to this one known-redirect host
+    rather than resolving every job_url, so a flaky resolve can't affect
+    sources that already hand tsenta a direct URL (jobright/simplify/
+    speedyapply). Falls back to the original URL on any failure - tsenta
+    will then show its own "couldn't detect" notice and _submit_link will
+    catch that, rather than this raising and losing the job entirely.
+    """
+    if urlparse(job_url).hostname != ZAPPLY_REDIRECT_HOST:
+        return job_url
+    try:
+        req = urllib.request.Request(job_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=REDIRECT_RESOLVE_TIMEOUT_S) as resp:
+            return resp.geturl()
+    except Exception:
+        return job_url
+
+
 def apply_via_tsenta(job_url):
     """Submits `job_url` to tsenta via the "Add Your Own" flow.
     Returns (ok: bool, message: str).
     """
+    job_url = _resolve_zapply_redirect(job_url)
+
     with sync_playwright() as p:
         try:
             context, page = get_logged_in_page(
@@ -84,9 +125,22 @@ def _submit_link(page, job_url):
     _wait_for_jd(page, jd_textarea, JD_WAIT_TIMEOUT_S)
     dump_debug_snapshot(page, "tsenta_after_jd_wait")
 
+    if scope.get_by_text(NO_ATS_DETECTED_TEXT, exact=False).count() > 0:
+        return False, (
+            "tsenta couldn't detect a supported application system for this "
+            "URL - not actually submitted"
+        )
+
     scope.get_by_text(APPLY_BUTTON_TEXT, exact=False).first.click()
     page.wait_for_timeout(2000)
     dump_debug_snapshot(page, "tsenta_final")
+
+    if scope.get_by_text(NO_ATS_DETECTED_TEXT, exact=False).count() > 0:
+        return False, (
+            "tsenta still showed 'no supported application system' after "
+            "clicking Apply - not actually submitted"
+        )
+
     return True, "Submitted to tsenta"
 
 

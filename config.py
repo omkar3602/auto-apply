@@ -16,6 +16,22 @@ TSENTA_PROFILE_DIR = os.path.join(BROWSER_PROFILES_DIR, "tsenta")
 
 SIMPLIFY_LISTINGS_URL = "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json"
 
+# Dice's own official MCP server - replaced their traditional developer API
+# (shut down in 2017). Public, no sign-in required.
+DICE_MCP_URL = "https://mcp.dice.com/mcp"
+DICE_SEARCH_KEYWORDS = [
+    "Software Engineer",
+    "Machine Learning Engineer",
+    "Data Scientist",
+    "AI Engineer",
+    "Data Engineer",
+]
+
+# zapplyjobs and speedyapply publish early-career listings as Markdown
+# tables (not JSON like SimplifyJobs) on GitHub, refreshed frequently.
+ZAPPLYJOBS_README_URL = "https://raw.githubusercontent.com/zapplyjobs/New-Grad-Jobs-2027/main/README.md"
+SPEEDYAPPLY_USA_URL = "https://raw.githubusercontent.com/speedyapply/2027-AI-College-Jobs/main/NEW_GRAD_USA.md"
+
 
 class Config:
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(INSTANCE_DIR, 'jobs.db')}"

@@ -13,6 +13,21 @@ def is_recent(seconds_old):
     return seconds_old is not None and 0 <= seconds_old < MAX_JOB_AGE_SECONDS
 
 
+def relative_time_label(seconds_old):
+    """"N minutes/hours/days ago" from an elapsed-seconds value - the same
+    phrasing every scraper's posted_label has used so far, factored out here
+    since more than one of them now computes it from a different starting
+    format (unix timestamp, ISO 8601 string, a "Nd" column)."""
+    if seconds_old is None:
+        return None
+    seconds_old = max(0, seconds_old)
+    if seconds_old < 3600:
+        return f"{max(1, int(seconds_old // 60))} minutes ago"
+    if seconds_old < 86400:
+        return f"{int(seconds_old // 3600)} hours ago"
+    return f"{int(seconds_old // 86400)} days ago"
+
+
 def upsert_job(source, data):
     """Insert if new; update fields if it already exists and is still
     undecided (status == "new"), so a re-sync never resurrects a job the

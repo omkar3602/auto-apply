@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from flask import Flask, redirect, send_from_directory, url_for
 
+from automation.auto_apply_schedule import start_auto_apply_schedule
 from automation.reminders import start_daily_reminder
 from automation.tasks import start_apply_worker
 from config import Config
@@ -26,7 +27,13 @@ def create_app():
     # Every background worker's success-path logging (sync results, apply
     # results, the daily reminder) has been invisible because of this; only
     # .exception()/.error() calls ever made it into the log.
-    logging.basicConfig(level=logging.INFO)
+    #
+    # format="%(message)s" drops the default "INFO:werkzeug:"/"INFO:app:"
+    # prefix on every line - each source already embeds its own timestamp
+    # (werkzeug's access log, our own "[source] ..." messages), so the
+    # prefix was redundant width, not information; this keeps lines short
+    # enough to read in a terminal without wrapping.
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     db.init_app(app)
     with app.app_context():
@@ -35,6 +42,7 @@ def create_app():
     register_blueprints(app)
     start_apply_worker(app)
     start_daily_reminder(app)
+    start_auto_apply_schedule(app)
 
     @app.route("/")
     def index():

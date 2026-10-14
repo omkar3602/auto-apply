@@ -6,3 +6,4 @@ instance/
 debug/
 browser_profiles/*/
 !browser_profiles/.gitkeep
+.venv-py39-backup
