@@ -33,7 +33,6 @@ from db import db
 from models import Job
 from automation import schedule_state
 from automation.tasks import run_sync_sync
-from automation.tsenta import resolve_apply_link
 
 STATE_KEY = "auto_apply_last_fired_slot"
 
@@ -115,17 +114,18 @@ BLOCKED_URL_PATTERNS = (
 # applied within the same hour it was scraped, and 94% of zapplyjobs
 # failures that week resolved to this exact generic listing page instead
 # of a real posting. That's 31% of ALL auto-apply attempts that week,
-# across every source. _next_candidate below resolves each zapplyjobs
-# candidate's redirect *before* queuing it and skips this exact dead end,
-# pulling the next candidate instead - so a doomed slot never consumes one
-# of the JOBS_PER_RUN, and the worker never burns a real tsenta attempt on
-# something already known to fail.
+# across every source.
+#
+# scrapers/zapplyjobs.py now resolves this redirect at scrape time (stored
+# job_url is already the real destination, or this dead end if the
+# redirect didn't lead anywhere - added so the job board badge and
+# "Application Link" are correct for manual browsing too, not just
+# auto-apply), so the check below is now a plain equality - no redirect to
+# follow here, that already happened before the row was ever stored.
 ZAPPLY_DEAD_END_URL = "https://zapply.jobs/jobs/"
 
 # Upper bound on how many candidates one run will even look at (beyond
-# JOBS_PER_RUN) while skipping dead zapplyjobs redirects - without this, a
-# run during an unusually bad batch could resolve hundreds of redirects
-# looking for JOBS_PER_RUN good ones.
+# JOBS_PER_RUN) while skipping dead-end zapplyjobs rows.
 MAX_CANDIDATES_CONSIDERED = JOBS_PER_RUN * 5
 
 # Sources like zapplyjobs/speedyapply scrape every row in their table with no
@@ -239,7 +239,7 @@ def _run_once(app):
         if queued >= JOBS_PER_RUN:
             break
 
-        if job.source == "zapplyjobs" and resolve_apply_link(job.job_url) == ZAPPLY_DEAD_END_URL:
+        if job.source == "zapplyjobs" and job.job_url == ZAPPLY_DEAD_END_URL:
             job.status = "apply_failed"
             job.status_changed_at = now
             job.applied_via = "auto"

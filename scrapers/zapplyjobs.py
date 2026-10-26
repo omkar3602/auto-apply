@@ -21,6 +21,19 @@ This repo covers every early-career field, not just tech (retail,
 warehouse, hospitality roles alongside SWE/data ones), so each row's title
 is checked against common.title_is_relevant before it's stored, rather
 than importing everything the table publishes.
+
+Zapply's own Apply link is a `zapply.jobs/l/d/...` redirect, not the real
+employer page - stored job_url is resolved to the real destination (see
+automation.tsenta.resolve_apply_link) before being saved, same resolver
+auto-apply already used at apply time, just run earlier here. Fixes two
+things that followed from storing the raw redirect: the job board badge
+(job_boards.job_board_name is domain-based, so a zapply.jobs URL always
+read as "Unknown") and the "Application Link" shown to a person browsing
+the tab, which used to go through Zapply's own redirector instead of
+straight to the posting. external_id stays the original, unresolved
+zapply.jobs link - that's the row's stable dedup identity; job_url is what
+gets shown and applied through, so it's the one that should change if a
+re-sync resolves somewhere new.
 """
 
 import json
@@ -29,6 +42,7 @@ import urllib.request
 import config as cfg
 from db import db
 from scrapers import common, markdown_table as mt
+from automation.tsenta import resolve_apply_link
 
 REQUEST_TIMEOUT_S = 30
 
@@ -55,6 +69,13 @@ def sync_jobs(app):
         if not common.is_recent(data.pop("_seconds_old")):
             too_old += 1
             continue
+
+        # Only resolve rows that actually clear every other filter - a
+        # resolve is a real HTTP round-trip, and most of what the table
+        # publishes each sync is irrelevant or already seen (upsert_job
+        # below still only writes a status="new" row's fields, same as
+        # before - this just changes what job_url holds when it does).
+        data["job_url"] = resolve_apply_link(data["job_url"])
 
         is_new = common.upsert_job("zapplyjobs", data)
         if is_new:

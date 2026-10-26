@@ -51,8 +51,9 @@ body {
 .tab-link.active { background: #111; color: #fff; }
 .tab-link:hover:not(.active) { background: #f0f0f0; }
 
+.topbar-actions { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
+
 .notif-btn {
-  margin-left: auto;
   flex-shrink: 0;
   border: none;
   background: transparent;
@@ -64,6 +65,43 @@ body {
 }
 .notif-btn:hover { background: #f0f0f0; }
 .notif-btn[hidden] { display: none; }
+
+.settings-wrap { position: relative; }
+.settings-btn {
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  line-height: 1;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.settings-btn:hover { background: #f0f0f0; }
+.settings-panel {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 14px 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 220px;
+}
+/* `display: flex` above wins over the browser's own `[hidden] { display:
+   none }` default (same specificity, this stylesheet loads after the UA
+   one) unless restated here - without this the panel showed regardless of
+   the `hidden` attribute JS was correctly toggling. */
+.settings-panel[hidden] { display: none; }
+.settings-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+.settings-option { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.settings-divider { border-top: 1px solid var(--border); margin: 4px 0; }
+.settings-apply { margin-top: 6px; }
 
 .content { padding: 24px 32px 64px; max-width: 1400px; margin: 0 auto; }
 
@@ -381,18 +419,6 @@ body {
   font-size: 18px;
   color: var(--muted);
 }
-.swipe-btn-keyboard {
-  position: absolute;
-  left: 100%;
-  margin-left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 44px;
-  height: 44px;
-  font-size: 18px;
-  color: var(--muted);
-}
-.swipe-btn-keyboard.active { background: var(--text); border-color: var(--text); color: #fff; }
 
 /* Detail page */
 .detail-page { max-width: 720px; }
@@ -479,8 +505,4 @@ body {
   }
 
   .swipe-btn-undo { width: 38px; height: 38px; font-size: 16px; }
-  /* Keyboard mode is a desktop concept (arrow keys) - on a phone-width
-     viewport this button would also sit past the controls' right edge,
-     close to overflowing the 16px side gutter. */
-  .swipe-btn-keyboard { display: none; }
 }

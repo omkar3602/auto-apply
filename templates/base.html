@@ -25,7 +25,30 @@
       <a class="tab-link {% if request.path.startswith('/history/auto') %}active{% endif %}"
          href="{{ url_for('history.auto_history') }}">Auto History</a>
     </nav>
-    <button id="notif-btn" class="notif-btn" type="button" hidden></button>
+    <div class="topbar-actions">
+      {% if request.path.startswith('/swipe') %}
+      <div class="settings-wrap">
+        <button id="settings-btn" class="settings-btn" type="button"
+                aria-label="Settings" aria-expanded="false" title="Keyboard mode &amp; swipe sources">⚙</button>
+        <div id="settings-panel" class="settings-panel" hidden>
+          <label class="settings-option">
+            <input type="checkbox" id="settings-keyboard-mode">
+            Keyboard mode
+          </label>
+          <div class="settings-divider"></div>
+          <div class="settings-title">Swipe mode sources</div>
+          {% for key, meta in nav_sources.items() %}
+          <label class="settings-option">
+            <input type="checkbox" class="settings-source-checkbox" value="{{ key }}">
+            {{ meta.label }}
+          </label>
+          {% endfor %}
+          <button class="btn btn-secondary settings-apply" id="settings-apply-btn" type="button">Apply</button>
+        </div>
+      </div>
+      {% endif %}
+      <button id="notif-btn" class="notif-btn" type="button" hidden></button>
+    </div>
   </header>
   <main class="content">
     {% block content %}{% endblock %}

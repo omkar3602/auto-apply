@@ -58,14 +58,18 @@
       <button class="swipe-btn swipe-btn-pass" id="swipe-pass-btn" type="button" aria-label="Pass">✕</button>
       <a class="swipe-btn swipe-btn-link" id="swipe-link-btn" href="#" target="_blank" rel="noopener" aria-label="Open listing">↗</a>
       <button class="swipe-btn swipe-btn-apply" id="swipe-apply-btn" type="button" aria-label="Apply">♥</button>
-      <button class="swipe-btn swipe-btn-keyboard" id="swipe-keyboard-btn" type="button"
-              aria-label="Toggle keyboard mode" aria-pressed="false"
-              title="Keyboard mode: ← pass, → apply">⌨</button>
     </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script>
+  // Set by the gear-icon settings panel (templates/base.html, static/js/
+  // app.js) and persisted server-side - read once here instead of a
+  // fetch, so keyboard mode is in effect from the very first keypress
+  // instead of racing a network round-trip.
+  window.SWIPE_KEYBOARD_MODE = {{ "true" if keyboard_mode else "false" }};
+</script>
 <script src="{{ url_for('static', filename='js/swipe.js') }}"></script>
 {% endblock %}

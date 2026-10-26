@@ -142,4 +142,51 @@
       }
     });
   }
+
+  // Gear-icon settings panel (every page, top nav) - keyboard mode and
+  // which sources feed swipe mode. Persisted server-side (routes/
+  // settings.py) rather than localStorage: this app is used from more
+  // than one device (laptop, phone over tailscale), and a preference set
+  // on one browser needs to show up on the other.
+  const settingsBtn = document.getElementById("settings-btn");
+  const settingsPanel = document.getElementById("settings-panel");
+  if (settingsBtn && settingsPanel) {
+    const keyboardCheckbox = document.getElementById("settings-keyboard-mode");
+    const sourceCheckboxes = Array.from(document.querySelectorAll(".settings-source-checkbox"));
+    const applyBtn = document.getElementById("settings-apply-btn");
+
+    get("/settings").then((settings) => {
+      keyboardCheckbox.checked = !!settings.keyboard_mode;
+      // null (no filter saved yet) shows every source checked, matching
+      // what the page itself is actually showing right now by default.
+      const sources = settings.swipe_sources;
+      sourceCheckboxes.forEach((cb) => {
+        cb.checked = sources === null || sources.includes(cb.value);
+      });
+    });
+
+    settingsBtn.addEventListener("click", () => {
+      const open = settingsPanel.hidden;
+      settingsPanel.hidden = !open;
+      settingsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    document.addEventListener("click", (e) => {
+      if (settingsPanel.hidden) return;
+      if (settingsPanel.contains(e.target) || settingsBtn.contains(e.target)) return;
+      settingsPanel.hidden = true;
+      settingsBtn.setAttribute("aria-expanded", "false");
+    });
+
+    applyBtn.addEventListener("click", () => {
+      applyBtn.disabled = true;
+      fetch("/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyboard_mode: keyboardCheckbox.checked,
+          swipe_sources: sourceCheckboxes.filter((cb) => cb.checked).map((cb) => cb.value),
+        }),
+      }).then(() => window.location.reload());
+    });
+  }
 })();
