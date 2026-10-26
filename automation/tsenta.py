@@ -21,10 +21,17 @@ supported application system on this page... Choosing the wrong system
 will fail" notice instead, and clicking "Apply with Optimized Resume" past
 that point does not actually submit anything real (verified against
 tsenta's own Applications pipeline - none of 8 such "successful" submits
-showed up there). Fixed two ways: `_resolve_zapply_redirect` follows the
-redirect to the real employer URL before handing it to tsenta, and
-`_submit_link` now checks for that error notice and reports failure
-instead of blindly clicking Apply and assuming success.
+showed up there). Fixed two ways: `resolve_apply_link` follows a source's
+own redirect scheme to the real employer URL before handing it to tsenta
+(zapplyjobs' plain HTTP redirect), and `_submit_link` now checks for that
+error notice and reports failure instead of blindly clicking Apply and
+assuming success.
+
+(A Dice resolver lived here 2026-10-20 through 2026-10-26, including a
+logged-in version that clicked the real "Apply Now" button - removed along
+with Dice as a source entirely once real testing showed only ~1 in 6
+postings even had an external apply link, and the one found in testing
+still wasn't a platform tsenta could submit through.)
 """
 
 import urllib.request
@@ -50,31 +57,43 @@ def _looks_like_dashboard(page):
     return page.get_by_text(ADD_OWN_BUTTON_TEXT, exact=False).count() > 0
 
 
+def _fetch(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=REDIRECT_RESOLVE_TIMEOUT_S) as resp:
+        return resp
+
+
 def _resolve_zapply_redirect(job_url):
     """zapplyjobs' "Apply" links are a `zapply.jobs/l/d/...` redirect to the
-    real employer posting, not the posting itself - tsenta needs the real
-    URL to detect an ATS/fetch a JD. Scoped to this one known-redirect host
-    rather than resolving every job_url, so a flaky resolve can't affect
-    sources that already hand tsenta a direct URL (jobright/simplify/
-    speedyapply). Falls back to the original URL on any failure - tsenta
-    will then show its own "couldn't detect" notice and _submit_link will
-    catch that, rather than this raising and losing the job entirely.
+    real employer posting, not the posting itself - a plain HTTP redirect
+    tsenta needs the real URL to detect an ATS/fetch a JD. Falls back to the
+    original URL on any failure - tsenta will then show its own "couldn't
+    detect" notice and _submit_link will catch that, rather than this
+    raising and losing the job entirely.
     """
-    if urlparse(job_url).hostname != ZAPPLY_REDIRECT_HOST:
-        return job_url
     try:
-        req = urllib.request.Request(job_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=REDIRECT_RESOLVE_TIMEOUT_S) as resp:
-            return resp.geturl()
+        return _fetch(job_url).geturl()
     except Exception:
         return job_url
 
 
+def resolve_apply_link(job_url):
+    host = urlparse(job_url).hostname
+    if host == ZAPPLY_REDIRECT_HOST:
+        return _resolve_zapply_redirect(job_url)
+    return job_url
+
+
 def apply_via_tsenta(job_url):
     """Submits `job_url` to tsenta via the "Add Your Own" flow.
-    Returns (ok: bool, message: str).
+    Returns (ok: bool, message: str). The message always ends with the
+    actual link handed to tsenta (post-resolve_apply_link) - for a
+    zapplyjobs job this is the resolved real employer URL, not the
+    original stored job_url, which otherwise isn't visible anywhere once
+    the apply finishes (useful to tell "expired posting, redirect dead-
+    ended" apart from "this real URL genuinely isn't a supported ATS").
     """
-    job_url = _resolve_zapply_redirect(job_url)
+    resolved_url = resolve_apply_link(job_url)
 
     with sync_playwright() as p:
         try:
@@ -86,15 +105,17 @@ def apply_via_tsenta(job_url):
                 debug_label="tsenta",
             )
         except Exception as e:
-            return False, f"Could not reach/log in to tsenta: {e}"
+            return False, f"Could not reach/log in to tsenta: {e} | Link used: {resolved_url}"
 
         try:
-            return _submit_link(page, job_url)
+            ok, message = _submit_link(page, resolved_url)
         except Exception as e:
             dump_debug_snapshot(page, "tsenta_error")
-            return False, f"tsenta automation failed: {e}"
+            ok, message = False, f"tsenta automation failed: {e}"
         finally:
             context.close()
+
+    return ok, f"{message} | Link used: {resolved_url}"
 
 
 def _modal_scope(page):

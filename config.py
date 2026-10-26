@@ -16,15 +16,41 @@ TSENTA_PROFILE_DIR = os.path.join(BROWSER_PROFILES_DIR, "tsenta")
 
 SIMPLIFY_LISTINGS_URL = "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json"
 
-# Dice's own official MCP server - replaced their traditional developer API
-# (shut down in 2017). Public, no sign-in required.
-DICE_MCP_URL = "https://mcp.dice.com/mcp"
-DICE_SEARCH_KEYWORDS = [
+# Shared target-role keyword list: a job's title must contain one of these
+# phrases (case-insensitive) to count as relevant. Used by
+# scrapers/common.title_is_relevant (scrape-time filtering) and
+# automation/auto_apply_schedule.py (the scheduler's own selection filter).
+# Originally scoped to Dice's own search (removed 2026-10-26 - its real
+# apply success rate never recovered from 0/154, even after building and
+# fixing a logged-in redirect resolver: only ~1 in 6 postings had an
+# external apply link at all, and the one we found didn't work with tsenta
+# either), kept as the shared list since zapplyjobs still filters on it.
+RELEVANT_TITLE_KEYWORDS = [
     "Software Engineer",
     "Machine Learning Engineer",
     "Data Scientist",
     "AI Engineer",
     "Data Engineer",
+    # Added 2026-10-26, evidence-based: pulled every title currently
+    # excluded across all active sources (1,731 distinct) and checked
+    # real samples for each phrase below before adding it, to avoid
+    # guessing. "Research Scientist" and bare "Data Analyst" were
+    # considered and left out - real samples showed the former also
+    # matches non-tech roles (economics, immunochemistry research), and
+    # the latter is a meaningfully different role category, not just a
+    # phrasing variant of the roles above.
+    "Software Development Engineer",
+    "Full Stack",
+    "Backend",
+    "Back End",
+    "Developer",
+    "Machine Learning Research Scientist",
+    "AI Platform Engineer",
+    "AI Product Engineer",
+    "AI Prompt Engineer",
+    "AI Research Engineer",
+    "AI Security Engineer",
+    "AI Solutions Engineer",
 ]
 
 # zapplyjobs and speedyapply publish early-career listings as Markdown

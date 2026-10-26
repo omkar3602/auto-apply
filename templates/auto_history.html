@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Auto-Apply History · Auto Apply{% endblock %}
+
+{% block content %}
+<div class="tab-header">
+  <h1>Auto-Apply History</h1>
+</div>
+
+<form class="filters" method="get">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All outcomes</option>
+    <option value="applied" {% if selected_status == "applied" %}selected{% endif %}>Applied</option>
+    <option value="apply_failed" {% if selected_status == "apply_failed" %}selected{% endif %}>Failed</option>
+  </select>
+  <button type="button" class="btn btn-secondary" id="export-links-btn" disabled>Export Selected Links</button>
+</form>
+
+<table class="history-table" id="history-table">
+  <thead>
+    <tr>
+      <th><input type="checkbox" id="select-all-jobs" aria-label="Select all"></th>
+      <th>Title</th>
+      <th>Company</th>
+      <th>Source</th>
+      <th>Board</th>
+      <th>Status</th>
+      <th>Detail</th>
+      <th>Changed</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for job in jobs %}
+    <tr>
+      <td><input type="checkbox" class="job-select" value="{{ job.job_url }}" data-company="{{ job.company or '' }}" aria-label="Select {{ job.title }}"></td>
+      <td>{{ job.title }}</td>
+      <td>{{ job.company or "—" }}</td>
+      <td>{{ job.source }}</td>
+      <td><span class="badge badge-board{{ ' badge-board-unknown' if job.job_board == 'Unknown' else '' }}">{{ job.job_board }}</span></td>
+      <td><span class="status-badge status-{{ job.status }}">{{ job.status_label }}</span></td>
+      <td class="history-detail">{{ job.status_message or "—" }}</td>
+      <td>{{ job.status_changed_at | local_dt or "—" }}</td>
+      <td><a href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">View</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="empty-state">No auto-apply runs yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
+{% endblock %}

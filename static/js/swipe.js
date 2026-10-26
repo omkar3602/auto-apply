@@ -12,6 +12,7 @@
   const applyBtn = document.getElementById("swipe-apply-btn");
   const linkBtn = document.getElementById("swipe-link-btn");
   const undoBtn = document.getElementById("swipe-undo-btn");
+  const keyboardBtn = document.getElementById("swipe-keyboard-btn");
 
   // Only the most recent pass is undoable - apply has a real external side
   // effect (queued/submitted to tsenta) that can't be safely reversed, so
@@ -25,6 +26,30 @@
   const AXIS_LOCK_PX = 10; // px of movement before committing to horizontal-drag vs vertical-scroll
 
   let dragging = null; // { card, startX, startY, dx, dy, samples, rafId, axis }
+
+  // Off by default - arrow keys double as page/text scrolling, so this is
+  // an opt-in the user toggles on when they want hands-on-keyboard swiping.
+  // Remembered per-device via localStorage; falls back to session-only if
+  // storage is blocked (private browsing) rather than breaking the toggle.
+  const KEYBOARD_MODE_KEY = "swipeKeyboardMode";
+  let keyboardMode = false;
+  try {
+    keyboardMode = localStorage.getItem(KEYBOARD_MODE_KEY) === "1";
+  } catch (err) {
+    keyboardMode = false;
+  }
+
+  function setKeyboardMode(on) {
+    keyboardMode = on;
+    keyboardBtn.classList.toggle("active", on);
+    keyboardBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    try {
+      localStorage.setItem(KEYBOARD_MODE_KEY, on ? "1" : "0");
+    } catch (err) {
+      // Storage blocked - mode still works for this session, just won't
+      // be remembered next visit.
+    }
+  }
 
   function topCard() {
     // Cards mid-flyoff stay in the DOM briefly for their exit animation -
@@ -253,8 +278,10 @@
     if (card) decide(card, "right", { speed: 1.4 });
   });
   undoBtn.addEventListener("click", undoLastPass);
+  keyboardBtn.addEventListener("click", () => setKeyboardMode(!keyboardMode));
 
   document.addEventListener("keydown", (e) => {
+    if (!keyboardMode) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     if (document.activeElement && ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
     const card = topCard();
@@ -262,5 +289,6 @@
     decide(card, e.key === "ArrowRight" ? "right" : "left", { speed: 1.4 });
   });
 
+  setKeyboardMode(keyboardMode);
   refreshControls();
 })();

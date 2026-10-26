@@ -16,6 +16,11 @@ resubmitting these listings to a third-party aggregator or feed. Personal
 use inside this app doesn't republish anything - job_url already points
 back to Zapply's own apply link, which covers the link-back; "Zapply" is
 credited in this docstring and the job board badge below covers the rest.
+
+This repo covers every early-career field, not just tech (retail,
+warehouse, hospitality roles alongside SWE/data ones), so each row's title
+is checked against common.title_is_relevant before it's stored, rather
+than importing everything the table publishes.
 """
 
 import json
@@ -43,7 +48,7 @@ def sync_jobs(app):
             continue
 
         data = _parse_row(cells)
-        if not data:
+        if not data or not common.title_is_relevant(data["title"]):
             skipped += 1
             continue
 

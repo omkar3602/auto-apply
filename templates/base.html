@@ -20,8 +20,10 @@
         <a class="tab-link {% if request.path.startswith('/jobs/' ~ key) %}active{% endif %}"
            href="{{ url_for('jobs.tab_view', source=key) }}">{{ meta.label }}</a>
       {% endfor %}
-      <a class="tab-link {% if request.path.startswith('/history') %}active{% endif %}"
+      <a class="tab-link {% if request.path == '/history' %}active{% endif %}"
          href="{{ url_for('history.history') }}">History</a>
+      <a class="tab-link {% if request.path.startswith('/history/auto') %}active{% endif %}"
+         href="{{ url_for('history.auto_history') }}">Auto History</a>
     </nav>
     <button id="notif-btn" class="notif-btn" type="button" hidden></button>
   </header>

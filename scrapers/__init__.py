@@ -1,6 +1,5 @@
 from scrapers import jobright
 from scrapers import simplify
-from scrapers import dice
 from scrapers import zapplyjobs
 from scrapers import speedyapply
 
@@ -10,19 +9,15 @@ SOURCES = {
         "sync": jobright.sync_jobs,
     },
     "simplify": {
-        "label": "Simplify New Grad",
+        "label": "Simplify",
         "sync": simplify.sync_jobs,
     },
-    "dice": {
-        "label": "Dice",
-        "sync": dice.sync_jobs,
-    },
     "zapplyjobs": {
-        "label": "Zapply New Grad",
+        "label": "Zapply",
         "sync": zapplyjobs.sync_jobs,
     },
     "speedyapply": {
-        "label": "SpeedyApply AI/College",
+        "label": "SpeedyApply",
         "sync": speedyapply.sync_jobs,
     },
 }

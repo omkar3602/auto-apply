@@ -2,15 +2,33 @@
 
 from datetime import datetime
 
+import config as cfg
 from db import db
 from models import Job
 
-# "0/1/2 days old" - keep anything under 3 elapsed days (floor-day buckets 0, 1, 2).
-MAX_JOB_AGE_SECONDS = 3 * 86400
+# Narrowed from 3 days to 1 (2026-10-19) - keep anything under 24 elapsed
+# hours. Applies site-wide, across all 5 sources' sync/browse tabs; the
+# auto-apply scheduler's own 48h window (automation/auto_apply_schedule.py)
+# no longer needs to be stricter than this to stay meaningfully tighter.
+MAX_JOB_AGE_SECONDS = 1 * 86400
 
 
 def is_recent(seconds_old):
     return seconds_old is not None and 0 <= seconds_old < MAX_JOB_AGE_SECONDS
+
+
+def title_is_relevant(title):
+    """True if `title` matches one of our target roles (config.
+    RELEVANT_TITLE_KEYWORDS - the same list automation/auto_apply_schedule.py
+    filters on for auto-apply). Sources whose own feed isn't title-scoped -
+    zapplyjobs covers every early-career field, not just tech - use this at
+    discovery time so the swipe/browse tabs don't fill up with irrelevant
+    jobs either, not just auto-apply.
+    """
+    if not title:
+        return False
+    lowered = title.lower()
+    return any(keyword.lower() in lowered for keyword in cfg.RELEVANT_TITLE_KEYWORDS)
 
 
 def relative_time_label(seconds_old):

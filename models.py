@@ -38,6 +38,13 @@ class Job(db.Model):
     status = db.Column(db.String(20), nullable=False, default="new", index=True)
     status_message = db.Column(db.Text)
 
+    # Set when a job is queued, "auto" (automation/auto_apply_schedule.py)
+    # or "manual" (routes/jobs.py's apply_job - a swipe-right/Apply click).
+    # None for a job that's never been queued at all. Exists so the
+    # auto-apply history page (routes/history.py) can show only what the
+    # scheduler actually submitted, not every manual apply too.
+    applied_via = db.Column(db.String(20), index=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     status_changed_at = db.Column(db.DateTime)
 

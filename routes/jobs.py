@@ -82,6 +82,7 @@ def apply_job(job_id):
     # inline - see automation/tasks.start_apply_worker.
     job.status = "queued"
     job.status_changed_at = datetime.utcnow()
+    job.applied_via = "manual"
     db.session.commit()
     return jsonify({"ok": True, "status": "queued"})
 

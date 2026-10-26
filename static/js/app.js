@@ -129,5 +129,17 @@
 
     // In case a sync was already running when the page loaded
     pollSync(false);
+
+    // Chrome throttles/suspends setTimeout in a backgrounded tab, so the
+    // poll chain above can stall for as long as the tab stays hidden - if
+    // the real sync actually finished while that happened, the overlay is
+    // left showing "Syncing…" forever until something re-checks. Re-poll
+    // immediately on return instead of waiting for a timer that may not
+    // fire on schedule.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && !overlay.hidden) {
+        pollSync(true);
+      }
+    });
   }
 })();
