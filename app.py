@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo
 
 from flask import Flask, redirect, send_from_directory, url_for
 
-from automation.auto_apply_schedule import start_auto_apply_schedule
 from automation.reminders import start_daily_reminder
 from automation.tasks import start_apply_worker
 from config import Config
@@ -42,7 +41,9 @@ def create_app():
     register_blueprints(app)
     start_apply_worker(app)
     start_daily_reminder(app)
-    start_auto_apply_schedule(app)
+    # Disabled 2026-10-31: auto-apply moved to a Claude.ai scheduled session
+    # driving Tsenta's own MCP server instead of this in-app scheduler.
+    # start_auto_apply_schedule(app)
 
     @app.route("/")
     def index():
