@@ -448,21 +448,31 @@ body {
 .status-apply_failed { background: #fbdde3; color: #b3261e; }
 .history-detail { color: var(--muted); font-size: 13px; max-width: 320px; }
 
-/* Phone layout. The desktop topbar/content padding overflows a ~390px
-   viewport and forces the nav labels to wrap, so tighten spacing and let the
-   tab strip scroll sideways instead of wrapping. */
+/* Phone layout: two rows. Brand + the gear/bell on top; under them the
+   tabs as one full-width strip that scrolls sideways. (The desktop
+   .tabs flex-wrap otherwise stacks 7 tabs into a 4-row, ~150px header.) */
 @media (max-width: 640px) {
   .topbar {
-    gap: 12px;
-    padding: 12px 16px;
-    /* keep the nav on one line and scrollable rather than wrapping */
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 10px 16px 8px;
+  }
+  .brand { font-size: 16px; white-space: nowrap; line-height: 36px; }
+  .topbar-actions { order: 2; }
+  .tabs {
+    order: 3;
+    flex: 0 0 auto;
+    width: calc(100% + 32px);
+    margin: 0 -16px;
+    padding: 0 16px;
+    flex-wrap: nowrap;
+    gap: 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
-  .topbar::-webkit-scrollbar { display: none; }
-  .brand { font-size: 16px; white-space: nowrap; }
-  .tabs { gap: 4px; }
-  .tab-link { padding: 6px 10px; font-size: 14px; white-space: nowrap; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-link { padding: 6px 12px; font-size: 14px; white-space: nowrap; flex-shrink: 0; }
 
   .content { padding: 16px 16px 48px; }
 
@@ -487,10 +497,10 @@ body {
      below the topbar down to the control buttons (instead of the fixed 3:4
      card used on desktop), and only trim a little off .content's 16px side
      padding as breathing room around it rather than running the card
-     edge-to-edge. 118px = topbar height (54px at this breakpoint) +
+     edge-to-edge. 156px = topbar height (92px at this breakpoint) +
      .content's top/bottom padding (16px + 48px) above. */
   .swipe-page {
-    min-height: calc(95dvh - 118px);
+    min-height: calc(95dvh - 156px);
   }
   .swipe-deck {
     width: calc(90% + 12px);

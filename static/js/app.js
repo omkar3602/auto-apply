@@ -190,3 +190,12 @@
     });
   }
 })();
+
+// Phone nav is a sideways-scrolling strip: bring the current tab into view.
+(function () {
+  const tabs = document.querySelector(".tabs");
+  const active = tabs && tabs.querySelector(".tab-link.active");
+  if (active && tabs.scrollWidth > tabs.clientWidth) {
+    tabs.scrollLeft = active.offsetLeft - (tabs.clientWidth - active.offsetWidth) / 2;
+  }
+})();
