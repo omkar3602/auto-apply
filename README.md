@@ -9,7 +9,7 @@ https://github.com/user-attachments/assets/d7d61dc3-e2db-4225-a2be-a13617d25e09
 
 **Stack:** Python · Flask · SQLAlchemy · Playwright · PWA + Web Push
 
-**Interesting problems:** Persistant apply queues,
+**Interesting problems:** a crash-safe apply queue,
 description fetching across 8+ ATS layouts with graceful fallback,
 selectors matched against captured DOM to survive redeploys.
 
