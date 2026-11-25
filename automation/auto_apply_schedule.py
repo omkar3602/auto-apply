@@ -1,4 +1,5 @@
-"""When the auto-apply pass runs: hourly, 9am-8pm America/New_York, weekdays only.
+"""When the auto-apply pass runs: hourly, 6am-11pm America/New_York, every day (widened 2026-11-25 so
+new postings are caught early; before that it was 9am-8pm weekdays).
 
 What a pass does lives in automation/auto_apply_run.py; this file is only the clock.
 
@@ -25,7 +26,8 @@ from automation import auto_apply_run, schedule_state
 STATE_KEY = "auto_apply_last_fired_slot"
 
 SCHEDULE_TZ = ZoneInfo("America/New_York")
-SCHEDULE_HOURS = (9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+SCHEDULE_DAYS = (0, 1, 2, 3, 4, 5, 6)               # Monday=0 ... Sunday=6
+SCHEDULE_HOURS = tuple(range(6, 24))
 POLL_INTERVAL_S = 60
 
 # zapplyjobs and speedyapply were dropped from auto-apply on 2026-11-25 (still browsable in the
@@ -46,13 +48,9 @@ def _load_last_fired_slot():
 _last_fired_slot = _load_last_fired_slot()
 
 
-def _is_weekday(dt):
-    return dt.weekday() < 5  # Mon=0 ... Fri=4
-
-
 def _due_slot(now):
-    """The (date, hour) slot `now` falls in, or None outside weekday 9:00-20:59."""
-    if not _is_weekday(now) or now.hour not in SCHEDULE_HOURS:
+    """The (date, hour) slot `now` falls in, or None outside the scheduled days/hours."""
+    if now.weekday() not in SCHEDULE_DAYS or now.hour not in SCHEDULE_HOURS:
         return None
     return (now.date(), now.hour)
 

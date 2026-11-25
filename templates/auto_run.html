@@ -11,7 +11,7 @@
   found {{ run.found }}, passed {{ run.passed }},
   {{ "would apply " ~ run.would_apply if run.dry_run else "applied " ~ run.applied }},
   failed {{ run.failed }}, needs you {{ run.needs_you }}
-  {% if run.balance_before is not none %}· applications left {{ run.balance_before }}{% if run.balance_after is not none %} → {{ run.balance_after }}{% endif %}{% endif %}
+  {% if run.median_age_min is not none %}· median age of chosen jobs {{ run.median_age_min }} min {% endif %}{% if run.balance_before is not none %}· applications left {{ run.balance_before }}{% if run.balance_after is not none %} → {{ run.balance_after }}{% endif %}{% endif %}
 </p>
 {% if run.message %}<p>{{ run.message }}</p>{% endif %}
 
@@ -25,7 +25,7 @@
 
 <table class="history-table">
   <thead>
-    <tr><th>Verdict</th><th>Source</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Rule</th><th>Reason</th><th>Action</th></tr>
+    <tr><th>Verdict</th><th>Source</th><th>Score</th><th>Age</th><th>Title</th><th>Company</th><th>Location</th><th>Rule</th><th>Reason</th><th>Action</th></tr>
   </thead>
   <tbody>
     {% for d in decisions %}
@@ -33,6 +33,7 @@
       <td>{{ "Pass" if d.verdict == "pass" else "Skip" }}</td>
       <td>{{ d.source }}</td>
       <td>{{ d.match_score if d.match_score is not none else "—" }}</td>
+      <td>{% if d.age_minutes is none %}—{% elif d.age_minutes < 120 %}{{ d.age_minutes }}m{% else %}{{ (d.age_minutes / 60) | round(1) }}h{% endif %}</td>
       <td><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title }}</a></td>
       <td>{{ d.company or "—" }}</td>
       <td>{{ d.location or "—" }}</td>
@@ -41,7 +42,7 @@
       <td>{{ d.action.replace("_", " ") }}{% if d.message %}<br><small>{{ d.message }}</small>{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="9" class="empty-state">No candidates recorded.</td></tr>
+    <tr><td colspan="10" class="empty-state">No candidates recorded.</td></tr>
     {% endfor %}
   </tbody>
 </table>

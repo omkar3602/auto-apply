@@ -112,7 +112,7 @@ def hours_ago(h):
 
 
 @pytest.mark.parametrize("posted_at,skip", [
-    (hours_ago(2), False), (hours_ago(71), False), (hours_ago(72), False), (hours_ago(73), True), (hours_ago(120), True),
+    (hours_ago(2), False), (hours_ago(23), False), (hours_ago(24), False), (hours_ago(25), True), (hours_ago(120), True),
     (NOW + timedelta(minutes=30), False), (NOW + timedelta(hours=3), True),
     (datetime(2026, 11, 20, 10, 0), False),            # naive datetimes are read as UTC
     (datetime(2026, 11, 10, 10, 0), True),
@@ -122,8 +122,8 @@ def test_recency_exact_time(posted_at, skip):
 
 
 @pytest.mark.parametrize("label,skip", [
-    ("2 hours ago", False), ("45 minutes ago", False), ("Posted 5 hours ago", False), ("just now", False), ("yesterday", False),
-    ("1 day ago", False), ("2 days ago", False),
+    ("2 hours ago", False), ("45 minutes ago", False), ("Posted 5 hours ago", False), ("just now", False),
+    ("23 hours ago", False), ("1 day ago", True), ("yesterday", True), ("2 days ago", True),
     ("3 days ago", True), ("1 week ago", True), ("2 months ago", True),
     ("Reposted 1 hour ago", True), ("Reposted 3 days ago", True), ("sometime", True), ("", True), (None, True),
 ])
@@ -133,7 +133,7 @@ def test_recency_label_only(label, skip):
 
 def test_recency_exact_time_beats_label():
     old = cand(posted_at=hours_ago(100), posted_label="1 hour ago")
-    assert "over the 72h limit" in f.rule_recency(old, NOW)
+    assert "over the 24h limit" in f.rule_recency(old, NOW)
 
 
 def test_recency_with_nothing_is_unverifiable():

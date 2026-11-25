@@ -122,7 +122,7 @@ def test_jobright_uses_the_label_and_skips_reposts_and_old_days():
     assert ok.posted_at is None and f.evaluate(ok, NOW).passed
     assert f.evaluate(cands.from_job(job(source="jobright", posted_label="Reposted 1 hour ago")), NOW).category == "recency"
     assert f.evaluate(cands.from_job(job(source="jobright", posted_label="3 days ago")), NOW).category == "recency"
-    assert f.evaluate(cands.from_job(job(source="jobright", posted_label="2 days ago")), NOW).passed
+    assert f.evaluate(cands.from_job(job(source="jobright", posted_label="20 hours ago")), NOW).passed
 
 
 def test_jobright_over_five_years_is_skipped():

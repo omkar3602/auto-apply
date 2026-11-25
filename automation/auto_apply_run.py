@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 
 import config as cfg
 from automation import candidates as cand_mod
-from automation import filters, push, tsenta_mcp
+from automation import filters, push, schedule_state, tsenta_mcp
 from automation.tsenta_oauth import NeedsLogin, find_needs_login
 from db import db
 from models import AutoApplyDecision, AutoApplyRun, Job
@@ -132,8 +132,21 @@ def _evaluate_tsenta(client, rows, now, want_all):
 
 # ------------------------------------------------------------------ recording
 
-def _record(run, cand, verdict, action="none", message=None, job_id=None):
+def _age_minutes(cand, now):
+    age = filters.estimated_age(cand, now)
+    return None if age is None else int(age.total_seconds() // 60)
+
+
+def _freshness_key(item):
+    """Newest first; jobs whose age is unknown go last; equal ages go to the better match."""
+    cand, _ = item
+    age = _age_minutes(cand, None)
+    return (age is None, age if age is not None else 0, -(cand.match_score or 0))
+
+
+def _record(run, cand, verdict, action="none", message=None, job_id=None, now=None):
     row = AutoApplyDecision(
+        posted_at=_naive_utc(cand.posted_at), age_minutes=_age_minutes(cand, now),
         run_id=run.id, source=cand.source, title=(cand.title or "")[:500], company=cand.company,
         location="; ".join(cand.locations or [])[:255], url=cand.url, match_score=cand.match_score, job_id=job_id,
         tsenta_job_id=cand.ref if cand.source == "tsenta" else None,
@@ -328,6 +341,10 @@ def _default_client(allow_apply):
     return tsenta_mcp.TsentaClient.from_env(allow_apply=allow_apply)
 
 
+def _age_text(minutes):
+    return f"{minutes}m" if minutes < 120 else f"{minutes / 60:.1f}h"
+
+
 def _summary(run):
     skipped = run.skipped
     skip_text = ", ".join(f"{k} {v}" for k, v in sorted(skipped.items(), key=lambda kv: -kv[1])) or "none"
@@ -336,6 +353,8 @@ def _summary(run):
     body = f"found {run.found} · passed {run.passed} · {done} · failed {run.failed}"
     if run.needs_you:
         body += f" · needs you {run.needs_you}"
+    if run.median_age_min is not None:
+        body += f" · median age {_age_text(run.median_age_min)}"
     body += f"\nskipped: {skip_text}"
     if run.message:
         body += f"\n{run.message}"
@@ -348,6 +367,29 @@ def _notify(app, run):
         push.send_to_all(title, body, url=f"/history/auto/runs/{run.id}")
     except Exception:
         app.logger.exception("[auto-apply] push notification failed")
+
+
+CAP_STATE_KEY = "auto_apply_cap_notified_date"
+
+
+def _notify_daily_cap(app, run, now=None):
+    """One push per New York day, the first time the day's cap of DAILY_CAP applications is reached
+    in a live run. Later runs that day (which find no room) stay quiet."""
+    if run.dry_run:
+        return
+    try:
+        today = (now or datetime.now(DAY_TZ)).astimezone(DAY_TZ).date().isoformat()
+        sent = applications_today()
+        if sent < DAILY_CAP or schedule_state.load(CAP_STATE_KEY) == today:
+            return
+        schedule_state.save(CAP_STATE_KEY, today)                     # marked first, so a push failure can't repeat
+        push.send_to_all(
+            f"Daily cap reached: {sent}/{DAILY_CAP} applications",
+            "No more applications today; the scheduler resumes tomorrow. Jobs that pass in the meantime are left for the next day's runs.",
+            url=f"/history/auto/runs/{run.id}",
+        )
+    except Exception:
+        app.logger.exception("[auto-apply] daily-cap notification failed")
 
 
 def _prune():
@@ -413,6 +455,7 @@ def _run_locked(app, trigger, dry, client_factory, sync, now, notify):
                     run.id, "dry" if dry else "live", run.status, run.found, run.passed, run.applied, run.would_apply, run.failed)
     if notify:
         _notify(app, run)
+        _notify_daily_cap(app, run)
     return run
 
 
@@ -435,7 +478,9 @@ def _execute(app, run, dry, client_factory, now, notes, skipped):
         judged = _evaluate_tsenta(client, feed_rows, now, want_all=dry)
         judged += [(c, filters.evaluate(c, now)) for c in scrapers]
 
-        # Order: Tsenta by match score (already sorted), then the scrapers newest first (already sorted).
+        # Newest first across every source (best match breaks ties), so the 40-per-run cap is spent on
+        # fresh postings and the same-job duplicate check below keeps the earliest-seen copy.
+        judged.sort(key=_freshness_key)
         dup = _seed_duplicates()
         passers = []
         for cand, verdict in judged:
@@ -448,7 +493,7 @@ def _execute(app, run, dry, client_factory, now, notes, skipped):
                     passers.append((cand, verdict))
                     continue
             skipped[verdict.category] += 1
-            _record(run, cand, verdict)
+            _record(run, cand, verdict, now=now)
 
         room = DAILY_CAP - applications_today()
         budget = max(0, min(RUN_CAP, room))
@@ -463,9 +508,11 @@ def _execute(app, run, dry, client_factory, now, notes, skipped):
         chosen, rest = passers[:budget], passers[budget:]
         decisions = []
         for cand, verdict in chosen:
-            decisions.append((cand, _record(run, cand, verdict, action="would_apply" if dry else "none")))
+            decisions.append((cand, _record(run, cand, verdict, action="would_apply" if dry else "none", now=now)))
         for cand, verdict in rest:
-            _record(run, cand, verdict, action="capped", message="over the run/daily/balance cap")
+            _record(run, cand, verdict, action="capped", message="over the run/daily/balance cap", now=now)
+        ages = sorted(a for a in (_age_minutes(c, now) for c, _ in chosen) if a is not None)
+        run.median_age_min = ages[len(ages) // 2] if ages else None
         run.found = len(judged)
         run.passed = len(passers)
         db.session.commit()

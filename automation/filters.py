@@ -10,7 +10,7 @@ passed in), so the whole module is plain-Python testable. Sources are turned
 into `Candidate`s by automation/candidates.py.
 
 Decisions that shaped these rules (2026-11-25):
-- 72-hour recency; JobRight's "3 days ago" and "Reposted ..." labels can't be
+- 24-hour recency (was 72h until 2026-11-25); JobRight labels of a day or more ("1 day ago", "3 days ago") and "Reposted ..." labels can't be
   verified, so they are skipped. Exact timestamps (Tsenta, Simplify) are used
   when present.
 - The same role in different cities is several roles (apply to all). Only the
@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-MAX_AGE = timedelta(hours=72)
+MAX_AGE = timedelta(hours=24)          # permanent age limit for every source
 MAX_YEARS = 5
 NO_SPONSORSHIP = "NO_SPONSORSHIP"
 
@@ -317,8 +317,17 @@ def _label_age(label):
     return timedelta(seconds=int(m.group(1)) * per), None
 
 
+def estimated_age(c, now=None):
+    """How long ago the job was posted, or None if unknown: exact when the source gives a time,
+    otherwise read from a label like "2 hours ago" (approximate - "2 days ago" is at least 48h)."""
+    now = _as_utc(now) if now else datetime.now(timezone.utc)
+    if c.posted_at is not None:
+        return max(timedelta(0), now - _as_utc(c.posted_at))
+    return _label_age(c.posted_label)[0]
+
+
 def rule_recency(c, now=None):
-    """Posted within 72 hours - and provably so: no verifiable time, no apply."""
+    """Posted within MAX_AGE (24 hours) - and provably so: no verifiable time, no apply."""
     now = _as_utc(now) if now else datetime.now(timezone.utc)
     if c.posted_at is not None:
         age = now - _as_utc(c.posted_at)
@@ -330,8 +339,8 @@ def rule_recency(c, now=None):
         if age is None:
             return f"posting time can't be verified: {why}"
         described = f"'{c.posted_label.strip()}'"
-    # An exact time may be exactly 72h old; a label like "3 days ago" only says
-    # "at least 72h", so there it already counts as over.
+    # An exact time may be exactly 24h old; a label like "1 day ago" only says
+    # "at least 24h", so there it already counts as over.
     over = age > MAX_AGE if c.posted_at is not None else age >= MAX_AGE
     if over:
         return f"posted {described}, over the {int(MAX_AGE.total_seconds() // 3600)}h limit"

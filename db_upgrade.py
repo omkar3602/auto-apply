@@ -17,6 +17,8 @@ NEW_COLUMNS = {
         "tsenta_job_id": "VARCHAR(64)",
         "tsenta_application_id": "VARCHAR(64)",
     },
+    "auto_apply_decisions": {"posted_at": "DATETIME", "age_minutes": "INTEGER"},
+    "auto_apply_runs": {"median_age_min": "INTEGER"},
 }
 NEW_INDEXES = {
     "ix_jobs_tsenta_job_id": ("jobs", "tsenta_job_id"),

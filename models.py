@@ -122,6 +122,7 @@ class AutoApplyRun(db.Model):
     failed = db.Column(db.Integer, default=0)
     needs_you = db.Column(db.Integer, default=0)
     skipped_json = db.Column(db.Text, default="{}")  # {category: count}
+    median_age_min = db.Column(db.Integer)           # median minutes since posting, of the jobs chosen to apply to
     balance_before = db.Column(db.Integer)
     balance_after = db.Column(db.Integer)
     message = db.Column(db.Text)
@@ -151,6 +152,8 @@ class AutoApplyDecision(db.Model):
     location = db.Column(db.String(255))
     url = db.Column(db.Text)
     match_score = db.Column(db.Integer)
+    posted_at = db.Column(db.DateTime)               # naive UTC, when the source gave an exact time
+    age_minutes = db.Column(db.Integer)              # time since posting when this pass looked at it
     job_id = db.Column(db.Integer)                   # our Job row, when there is one
     tsenta_job_id = db.Column(db.String(64))
     verdict = db.Column(db.String(8), nullable=False)        # pass | skip

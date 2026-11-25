@@ -19,9 +19,12 @@ def iso(hours_ago=1):
     return (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
+POSTED = iso()                                      # one fixed "an hour ago" so same-age rows tie exactly
+
+
 def feed_row(n, score=80, title="Software Engineer", **kw):
     row = {"id": f"t{n}", "title": title, "companyName": f"Acme{n}", "companyWebsite": f"acme{n}.com", "url": f"https://acme{n}.example/jobs/{n}",
-           "locations": ["New York, NY"], "matchScore": score, "datePosted": iso(), "isSupportedAts": True, "yearsOfExperienceMin": 2,
+           "locations": ["New York, NY"], "matchScore": score, "datePosted": POSTED, "isSupportedAts": True, "yearsOfExperienceMin": 2,
            "sponsorship": "UNKNOWN", "clearanceRequired": False}
     row.update(kw)
     return row
@@ -95,6 +98,10 @@ def app(tmp_path, monkeypatch):
     pushes = []
     monkeypatch.setattr(run_mod.push, "send_to_all", lambda title, body, url="/": pushes.append((title, body, url)) or (1, 0, 0))
     app.pushes = pushes
+    state = {}
+    monkeypatch.setattr(run_mod.schedule_state, "load", lambda k: state.get(k))
+    monkeypatch.setattr(run_mod.schedule_state, "save", lambda k, v: state.__setitem__(k, v))
+    app.state = state
     with app.app_context():
         yield app
         db.session.remove()
@@ -138,7 +145,7 @@ def test_dry_run_is_the_default_when_not_told_otherwise(app):
     assert run.dry_run and client.allow_apply is False
 
 
-def test_feed_is_judged_best_score_first_and_descriptions_only_for_contenders(app):
+def test_feed_ties_on_age_go_to_the_best_score_and_descriptions_only_for_contenders(app):
     rows = [feed_row(1, 50), feed_row(2, 95), feed_row(3, 70, title="Chef"), feed_row(4, 80)]
     client = FakeClient(True, rows=rows)
     go(app, client)
@@ -231,6 +238,30 @@ def test_the_daily_cap_of_60_holds_across_runs(app, monkeypatch):
     assert third.applied_ids == [] and "daily cap" in run3.message
 
 
+def test_one_notification_the_day_the_cap_is_hit(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    go(app, FakeClient(True, rows=[feed_row(i, score=100 - i) for i in range(1, 51)]))
+    assert len(app.pushes) == 1 and "cap" not in app.pushes[0][0].lower()           # 40 of 60: only the run summary
+    go(app, FakeClient(True, rows=[feed_row(i) for i in range(51, 101)]))           # reaches 60
+    titles = [p[0] for p in app.pushes]
+    assert sum("Daily cap reached: 60/60" in t for t in titles) == 1
+    go(app, FakeClient(True, rows=[feed_row(i) for i in range(101, 110)]))          # a later run the same day
+    assert sum("Daily cap reached" in p[0] for p in app.pushes) == 1
+
+
+def test_the_cap_notification_comes_again_the_next_day(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    app.state[run_mod.CAP_STATE_KEY] = "2000-01-01"
+    go(app, FakeClient(True, rows=[feed_row(i, score=100 - i) for i in range(1, 51)]))
+    go(app, FakeClient(True, rows=[feed_row(i) for i in range(51, 101)]))
+    assert sum("Daily cap reached" in p[0] for p in app.pushes) == 1
+
+
+def test_a_dry_run_never_sends_the_cap_notification(app):
+    go(app, FakeClient(True, rows=[feed_row(i) for i in range(1, 60)]))
+    assert not any("Daily cap" in p[0] for p in app.pushes)
+
+
 def test_dry_runs_do_not_use_up_the_daily_cap(app):
     go(app, FakeClient(True, rows=[feed_row(i) for i in range(1, 30)]))
     assert run_mod.applications_today() == 0
@@ -250,17 +281,46 @@ def test_no_credits_means_no_applies_and_a_note(app, monkeypatch):
     assert client.applied_ids == [] and "no applications left" in run.message
 
 
-def test_scrapers_follow_the_feed_newest_first(app):
-    client = FakeClient(True, rows=[feed_row(1, 60)])
-    old = scraper_job(1)
-    new = scraper_job(2)
-    old.created_at = datetime.utcnow() - timedelta(hours=5)
-    db.session.commit()
+def test_newest_first_across_every_source_with_score_breaking_ties(app):
+    rows = [feed_row(1, 99, datePosted=iso(22)), feed_row(2, 60, datePosted=iso(0.2)), feed_row(3, 70, datePosted=iso(2)), feed_row(4, 90, datePosted=iso(2))]
+    scraper_job(1)                                                       # simplify, posted ~2h ago per its raw date
+    run = go(app, FakeClient(True, rows=rows))
+    order = [d.tsenta_job_id or d.source for d in AutoApplyDecision.query.filter_by(verdict="pass").order_by(AutoApplyDecision.id)]
+    assert order[0] == "t2" and order[-1] == "t1"                        # 12 minutes old first, 22 hours old last
+    assert order.index("t4") < order.index("t3")                         # same age: better match first
+    assert set(order[1:4]) == {"t4", "t3", "simplify"}
+
+
+def test_the_cap_is_spent_on_fresh_postings_not_old_high_scores(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    rows = [feed_row(i, 99, datePosted=iso(20)) for i in range(1, 41)] + [feed_row(100 + i, 50, datePosted=iso(0.5)) for i in range(1, 6)]
+    client = FakeClient(True, rows=rows)
     go(app, client)
-    order = [d.source + (d.tsenta_job_id or "") for d in AutoApplyDecision.query.filter_by(verdict="pass").order_by(AutoApplyDecision.id)]
-    assert order == ["tsentat1", "simplify", "simplify"]
-    urls = [d.url for d in AutoApplyDecision.query.filter_by(source="simplify").order_by(AutoApplyDecision.id)]
-    assert urls == [new.job_url, old.job_url]
+    assert len(client.applied_ids) == 40
+    assert all(f"t{100 + i}" in client.applied_ids for i in range(1, 6))
+
+
+def test_age_is_recorded_per_candidate_and_as_a_median_for_the_run(app):
+    rows = [feed_row(1, datePosted=iso(0.5)), feed_row(2, datePosted=iso(1)), feed_row(3, datePosted=iso(3))]
+    run = go(app, FakeClient(True, rows=rows))
+    ages = {d.tsenta_job_id: d.age_minutes for d in AutoApplyDecision.query.all()}
+    assert 28 <= ages["t1"] <= 32 and 58 <= ages["t2"] <= 62 and 178 <= ages["t3"] <= 182
+    assert 58 <= run.median_age_min <= 62
+    assert "median age" in app.pushes[0][1]
+    page = app.test_client().get(f"/history/auto/runs/{run.id}").data.decode()
+    assert "30m" in page or "29m" in page or "31m" in page
+
+
+def test_postings_over_24_hours_old_are_skipped_whatever_their_score(app):
+    run = go(app, FakeClient(True, rows=[feed_row(1, 99, datePosted=iso(30)), feed_row(2, 50, datePosted=iso(23))]))
+    assert run.passed == 1 and json.loads(run.skipped_json) == {"recency": 1}
+    assert "24h" in AutoApplyDecision.query.filter_by(tsenta_job_id="t1").one().reason
+
+
+def test_jobs_with_no_known_age_go_last(app):
+    scraper_job(1, posted_label=None, raw_json=json.dumps({}), source="jobright")
+    run = go(app, FakeClient(True, rows=[feed_row(1)]))
+    assert run.found == 2
 
 
 # ------------------------------------------------------------------ rules and duplicates
@@ -479,13 +539,13 @@ def clock(monkeypatch, tmp_path):
     return saved
 
 
-def test_runs_only_weekdays_9_to_8(clock):
-    assert sched._due_slot(datetime(2026, 11, 25, 9, 0, tzinfo=NY)) is not None
-    assert sched._due_slot(datetime(2026, 11, 25, 20, 59, tzinfo=NY)) is not None
-    assert sched._due_slot(datetime(2026, 11, 25, 8, 59, tzinfo=NY)) is None
-    assert sched._due_slot(datetime(2026, 11, 25, 21, 0, tzinfo=NY)) is None
-    assert sched._due_slot(datetime(2026, 11, 28, 12, 0, tzinfo=NY)) is None      # Saturday
-    assert sched._due_slot(datetime(2026, 11, 29, 12, 0, tzinfo=NY)) is None      # Sunday
+def test_runs_every_day_from_6am_to_11pm(clock):
+    assert sched._due_slot(datetime(2026, 11, 25, 6, 0, tzinfo=NY)) is not None
+    assert sched._due_slot(datetime(2026, 11, 25, 23, 59, tzinfo=NY)) is not None
+    assert sched._due_slot(datetime(2026, 11, 25, 5, 59, tzinfo=NY)) is None
+    assert sched._due_slot(datetime(2026, 11, 25, 0, 30, tzinfo=NY)) is None
+    assert sched._due_slot(datetime(2026, 11, 28, 12, 0, tzinfo=NY)) is not None  # Saturday
+    assert sched._due_slot(datetime(2026, 11, 29, 12, 0, tzinfo=NY)) is not None  # Sunday
 
 
 def test_each_hour_fires_once_and_a_missed_one_runs_late(app, clock, monkeypatch):
@@ -496,7 +556,7 @@ def test_each_hour_fires_once_and_a_missed_one_runs_late(app, clock, monkeypatch
     assert len(calls) == 1
     sched.tick(app, datetime(2026, 11, 25, 11, 40, tzinfo=NY))                    # woke from sleep 40 minutes into the hour
     assert len(calls) == 2
-    sched.tick(app, datetime(2026, 11, 28, 11, 0, tzinfo=NY))
+    sched.tick(app, datetime(2026, 11, 28, 3, 0, tzinfo=NY))                     # 3am: not scheduled
     assert len(calls) == 2
 
 

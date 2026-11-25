@@ -112,9 +112,8 @@ and never contact Tsenta.
 
 ### The hourly scheduler (Stage 4 - built, not switched on yet)
 
-`automation/auto_apply_schedule.py` is the clock (hourly, 9am-8pm New York, weekdays; a run missed while
-the Mac slept happens late, never not at all) and `automation/auto_apply_run.py` is one pass: Tsenta's
-feed best match first, then Simplify and JobRight; the rules in `automation/filters.py`; at most 40
+`automation/auto_apply_schedule.py` is the clock (hourly, 6am-11pm New York, every day; a run missed while
+the Mac slept happens late, never not at all) and `automation/auto_apply_run.py` is one pass: every source's postings newest first (best match breaks ties); the rules in `automation/filters.py`; at most 40
 applications per run and 60 per day; never twice to the same job; one push per run. Two passes can't
 overlap (a lock shared with the manual tool). Every candidate and why it passed or was skipped is kept
 for 14 days at **/history/auto/runs**. A manual pass: `.venv/bin/python tools/auto_apply_run.py`.
