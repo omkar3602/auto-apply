@@ -40,6 +40,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 
 import config as cfg
+from automation import tsenta_mcp
 from automation.browser import get_logged_in_page, dump_debug_snapshot
 
 ADD_OWN_BUTTON_TEXT = "Add your own"
@@ -85,6 +86,26 @@ def resolve_apply_link(job_url):
 
 
 def apply_via_tsenta(job_url):
+    """Where every queued apply (manual Apply / swipe right) goes. Returns (ok, message).
+
+    - While DRY_RUN is on (the default), or when there's no MCP sign-in, this is the
+      browser flow below, exactly as it has always worked.
+    - After go-live (DRY_RUN off) with an MCP sign-in, it applies through Tsenta's
+      MCP server and waits to hear what Tsenta really did (automation/tsenta_mcp.py).
+    """
+    if cfg.DRY_RUN or not tsenta_mcp.is_configured():
+        return apply_via_browser(job_url)
+    from automation.tsenta_oauth import NeedsLogin
+
+    try:
+        return tsenta_mcp.apply_one_url(resolve_apply_link(job_url))
+    except NeedsLogin as exc:
+        return False, str(exc)
+    except tsenta_mcp.TsentaError as exc:
+        return False, f"Could not reach Tsenta's MCP: {exc}"
+
+
+def apply_via_browser(job_url):
     """Submits `job_url` to tsenta via the "Add Your Own" flow.
     Returns (ok: bool, message: str). The message always ends with the
     actual link handed to tsenta (post-resolve_apply_link) - for a

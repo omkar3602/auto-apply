@@ -8,6 +8,12 @@
 #   ./autoapply status     running? on what PID? responding?
 #   ./autoapply logs       tail the output and error logs
 #   ./autoapply uninstall  stop and remove the launchd agent
+#   ./autoapply plist      print the launchd plist it would write (token hidden)
+#
+# Auto-apply settings are read from the environment you run start/restart in:
+#   DRY_RUN=false          really apply (default: true = report only, nothing applied)
+#   TSENTA_MCP_TOKEN=...   optional static Tsenta token (normally the one-time
+#                          browser sign-in in instance/tsenta_oauth.json is used)
 #
 # The launchd plist is generated from this script's own location, so moving
 # or renaming the project directory just works - re-run `start` and it
@@ -50,6 +56,11 @@ LABEL="com.autoapply.server"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PYTHON="$REPO/.venv/bin/python"
 PORT="${PORT:-8000}"
+# Anything but a clear "off" keeps dry run ON, so a typo can never switch real applying on.
+case "$(printf '%s' "${DRY_RUN:-true}" | tr '[:upper:]' '[:lower:]')" in
+  false|0|no|off) DRY_RUN_VALUE="false" ;;
+  *)              DRY_RUN_VALUE="true" ;;
+esac
 DOMAIN="gui/$(id -u)"
 OUT_LOG="/tmp/autoapply.log"
 ERR_LOG="/tmp/autoapply.err.log"
@@ -57,12 +68,20 @@ ERR_LOG="/tmp/autoapply.err.log"
 die() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 info() { printf '\033[32m==>\033[0m %s\n' "$1"; }
 
-write_plist() {
-  mkdir -p "$(dirname "$PLIST")"
+xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+# The Tsenta token is only written when it's set in the shell running this script,
+# and never printed (see cmd_plist).
+token_entry() {
+  [ -n "${TSENTA_MCP_TOKEN:-}" ] || return 0
+  printf '        <key>TSENTA_MCP_TOKEN</key>\n        <string>%s</string>\n' "$(xml_escape "$TSENTA_MCP_TOKEN")"
+}
+
+render_plist() {
   # caffeinate -s defers system sleep only while the app runs, and only on
   # AC power - the "plugged in, screen locked" case. No permanent pmset
   # change, and normal sleep resumes the moment this stops.
-  cat > "$PLIST" <<PLIST_EOF
+  cat <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
@@ -85,6 +104,9 @@ write_plist() {
         <string>America/New_York</string>
         <key>VAPID_CONTACT_EMAIL</key>
         <string>mailto:omkarj3602@gmail.com</string>
+        <key>DRY_RUN</key>
+        <string>$DRY_RUN_VALUE</string>
+$(token_entry)
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -99,7 +121,18 @@ write_plist() {
 </dict>
 </plist>
 PLIST_EOF
+}
+
+write_plist() {
+  mkdir -p "$(dirname "$PLIST")"
+  # Owner-only: it can hold the Tsenta token.
+  ( umask 077; render_plist > "$PLIST" )
+  chmod 600 "$PLIST"
   plutil -lint "$PLIST" >/dev/null || die "generated plist is invalid"
+}
+
+cmd_plist() {
+  render_plist | sed -E '/TSENTA_MCP_TOKEN/{n;s#<string>.*</string>#<string>(hidden)</string>#;}'
 }
 
 is_loaded() { launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; }
@@ -146,11 +179,12 @@ cmd_start() {
   is_loaded || check_port_free
   write_plist
   if is_loaded; then
-    info "already loaded - restarting to pick up any changes"
-    launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null
-  else
-    do_bootstrap
+    # kickstart -k would reuse the OLD plist, so DRY_RUN/token changes wouldn't apply.
+    info "already loaded - reloading to pick up any changes"
+    do_bootout
+    sleep 1
   fi
+  do_bootstrap
   sleep 2
   cmd_status
 }
@@ -163,7 +197,8 @@ cmd_restart() {
   [ -f "$PLIST" ] || die "not installed yet - run: autoapply start"
   require_repo
   write_plist
-  if is_loaded; then launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null; else do_bootstrap; fi
+  if is_loaded; then do_bootout; sleep 1; fi
+  do_bootstrap
   sleep 2
   cmd_status
 }
@@ -179,6 +214,9 @@ cmd_status() {
     printf 'start it: autoapply start\n'
     return 0
   fi
+  local mode
+  mode="$(plutil -extract EnvironmentVariables.DRY_RUN raw "$PLIST" 2>/dev/null || echo true)"
+  if [ "$mode" = "false" ]; then printf 'applying: \033[31mLIVE\033[0m (DRY_RUN=false)\n'; else printf 'applying: dry run (nothing is applied)\n'; fi
   local pid; pid="$(service_pid || true)"
   printf 'service:  \033[32mrunning\033[0m%s\n' "${pid:+ (pid $pid)}"
 
@@ -216,6 +254,7 @@ case "${1:-}" in
   status)    cmd_status ;;
   logs)      cmd_logs ;;
   uninstall) cmd_uninstall ;;
+  plist)     cmd_plist ;;
   *)
     sed -n '3,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 1 ;;

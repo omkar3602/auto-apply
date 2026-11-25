@@ -86,6 +86,39 @@ with an explanatory message rather than silently retried - it's not safe to
 guess whether tsenta actually got the submission before the crash, so it's
 left for you to check tsenta and hit Retry if needed.
 
+
+## Applying through Tsenta's MCP (in progress)
+
+The apply queue is moving from browser automation to Tsenta's MCP server
+(`automation/tsenta_mcp.py`). It does nothing yet: `DRY_RUN` defaults to **on**, and
+while it is on every apply still uses the browser flow exactly as before. Set up the
+sign-in once, on the Mac, so it is ready:
+
+```bash
+.venv/bin/python tools/tsenta_login.py          # opens your browser; approve once
+.venv/bin/python tools/tsenta_login.py --check  # tests it without a browser (read-only)
+```
+
+Tsenta has no static API key, so this is an OAuth sign-in: the tokens are saved in
+`instance/tsenta_oauth.json` (git-ignored, owner-only) and refresh by themselves. If the
+refresh token is ever revoked, the scheduler reports "run tools/tsenta_login.py" instead of
+waiting for a browser. `TSENTA_MCP_TOKEN` (a raw bearer token) is only a short-lived
+override for quick tests. The automated tests (`.venv/bin/pytest`) run against fake servers
+and never contact Tsenta.
+
+### The hourly scheduler (Stage 4 - built, not switched on yet)
+
+`automation/auto_apply_schedule.py` is the clock (hourly, 9am-8pm New York, weekdays; a run missed while
+the Mac slept happens late, never not at all) and `automation/auto_apply_run.py` is one pass: Tsenta's
+feed best match first, then Simplify and JobRight; the rules in `automation/filters.py`; at most 40
+applications per run and 60 per day; never twice to the same job; one push per run. Two passes can't
+overlap (a lock shared with the manual tool). Every candidate and why it passed or was skipped is kept
+for 14 days at **/history/auto/runs**. A manual pass: `.venv/bin/python tools/auto_apply_run.py`.
+
+`DRY_RUN` is read from the environment of `./autoapply start` and written into the launchd plist
+(default **true**; only false/0/no/off turns it off). `./autoapply plist` shows the plist (token hidden),
+`./autoapply status` shows the mode. `start`/`restart` now fully reload the service so env changes apply.
+
 ## Daily apply reminder (Web Push)
 
 A bell button in the top nav (hidden on `localhost`, same gate as the

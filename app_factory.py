@@ -1,0 +1,85 @@
+import logging
+import os
+from datetime import timezone
+from zoneinfo import ZoneInfo
+
+from flask import Flask, redirect, send_from_directory, url_for
+
+from automation.auto_apply_schedule import start_auto_apply_schedule
+from automation.reminders import start_daily_reminder
+from automation.tasks import start_apply_worker
+from config import Config
+import db_upgrade
+from db import db
+from routes import register_blueprints
+from scrapers import SOURCES
+
+DEFAULT_SOURCE = next(iter(SOURCES))
+DISPLAY_TZ = ZoneInfo("America/New_York")
+
+
+def create_app(config_overrides=None, background=None):
+    """background=False (or AUTOAPPLY_NO_BACKGROUND=1) builds the app without starting any
+    worker thread - for tests and one-off tools."""
+    if background is None:
+        background = os.environ.get("AUTOAPPLY_NO_BACKGROUND") != "1"
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    app.config.update(config_overrides or {})
+
+    # Without this, app.logger.info(...) is silently dropped - Flask's
+    # logger has no level of its own, so it inherits Python's root logger
+    # default (WARNING), and there's no handler installed below that either.
+    # Every background worker's success-path logging (sync results, apply
+    # results, the daily reminder) has been invisible because of this; only
+    # .exception()/.error() calls ever made it into the log.
+    #
+    # format="%(message)s" drops the default "INFO:werkzeug:"/"INFO:app:"
+    # prefix on every line - each source already embeds its own timestamp
+    # (werkzeug's access log, our own "[source] ..." messages), so the
+    # prefix was redundant width, not information; this keeps lines short
+    # enough to read in a terminal without wrapping.
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+        db_upgrade.upgrade(db.engine)
+
+    register_blueprints(app)
+    if background:
+        start_apply_worker(app)
+        start_daily_reminder(app)
+        # Back on (Stage 5, 2026-11-25) with DRY_RUN on by default: it reports, it doesn't apply.
+        start_auto_apply_schedule(app)
+
+    @app.route("/")
+    def index():
+        return redirect(url_for("swipe.swipe"))
+
+    @app.route("/sw.js")
+    def service_worker():
+        # Served from the root, not /static/sw.js, so its default scope is
+        # "/" (the whole site) instead of just "/static/" - a service
+        # worker's scope defaults to its own directory, and without this it
+        # never controls real pages, so navigator.serviceWorker.ready would
+        # never resolve on them (push subscribe/unsubscribe depend on it).
+        return send_from_directory(
+            os.path.join(app.root_path, "static"), "sw.js", mimetype="application/javascript"
+        )
+
+    @app.context_processor
+    def inject_sources():
+        return {"nav_sources": SOURCES, "default_source": DEFAULT_SOURCE}
+
+    @app.template_filter("local_dt")
+    def local_dt(value, fmt="%Y-%m-%d %H:%M"):
+        # Columns are stored as naive UTC (datetime.utcnow()); attach that
+        # before converting, or astimezone() would assume local time instead.
+        if value is None:
+            return None
+        return value.replace(tzinfo=timezone.utc).astimezone(DISPLAY_TZ).strftime(fmt)
+
+    return app
+
+

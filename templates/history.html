@@ -17,6 +17,8 @@
     <option value="">All statuses</option>
     <option value="applied" {% if selected_status == "applied" %}selected{% endif %}>Applied</option>
     <option value="passed" {% if selected_status == "passed" %}selected{% endif %}>Passed</option>
+    <option value="apply_failed" {% if selected_status == "apply_failed" %}selected{% endif %}>Failed</option>
+    <option value="needs_review" {% if selected_status == "needs_review" %}selected{% endif %}>Needs you</option>
   </select>
   <button type="button" class="btn btn-secondary" id="export-links-btn" disabled>Export Selected Links</button>
 </form>
@@ -44,7 +46,7 @@
       <td><span class="badge badge-board{{ ' badge-board-unknown' if job.job_board == 'Unknown' else '' }}">{{ job.job_board }}</span></td>
       <td><span class="status-badge status-{{ job.status }}">{{ job.status_label }}</span></td>
       <td>{{ job.status_changed_at | local_dt or "—" }}</td>
-      <td><a href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">View</a></td>
+      <td>{% if job.source in nav_sources %}<a href="{{ url_for('jobs.detail', source=job.source, job_id=job.id) }}">View</a>{% else %}<a href="{{ job.job_url }}" target="_blank" rel="noopener">Open</a>{% endif %}</td>
     </tr>
     {% else %}
     <tr><td colspan="8" class="empty-state">Nothing here yet.</td></tr>

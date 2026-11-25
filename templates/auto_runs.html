@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Auto-Apply Runs · Auto Apply{% endblock %}
+
+{% block content %}
+<div class="tab-header">
+  <h1>Auto-Apply Runs</h1>
+  <a class="link-btn" href="{{ url_for('history.auto_history') }}">&larr; History</a>
+</div>
+
+<table class="history-table">
+  <thead>
+    <tr><th>Started</th><th>Mode</th><th>Status</th><th>Found</th><th>Passed</th><th>Applied / would</th><th>Failed</th><th>Needs you</th><th>Skipped by rule</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for run in runs %}
+    <tr>
+      <td>{{ run.started_at | local_dt or "—" }}</td>
+      <td>{{ "DRY RUN" if run.dry_run else "Live" }}{{ " · manual" if run.trigger == "manual" else "" }}</td>
+      <td>{{ run.status }}</td>
+      <td>{{ run.found }}</td>
+      <td>{{ run.passed }}</td>
+      <td>{{ run.would_apply if run.dry_run else run.applied }}</td>
+      <td>{{ run.failed }}</td>
+      <td>{{ run.needs_you }}</td>
+      <td class="history-detail">{% for k, v in run.skipped.items() %}{{ k }} {{ v }}{{ ", " if not loop.last }}{% else %}—{% endfor %}</td>
+      <td><a href="{{ url_for('history.auto_run', run_id=run.id) }}">Details</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10" class="empty-state">No runs yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

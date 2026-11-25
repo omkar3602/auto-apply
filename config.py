@@ -69,3 +69,14 @@ class Config:
     # Pairs with the WAL pragma in db.py.
     SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"timeout": 30}}
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-secret")
+
+# --- auto-apply through Tsenta's MCP server (see automation/tsenta_mcp.py) ---
+TSENTA_MCP_URL = os.environ.get("TSENTA_MCP_URL", "https://api.autojobs.me/api/v1/mcp")
+# The one-time browser login (tools/tsenta_login.py) stores the OAuth tokens here.
+# instance/ is git-ignored, so no token ever lands in the repo.
+TSENTA_OAUTH_FILE = os.path.join(INSTANCE_DIR, "tsenta_oauth.json")
+
+# DRY_RUN is ON unless DRY_RUN=false (or 0/no/off) is set. While it's on, nothing
+# is applied through the MCP client: the scheduler only reports what it would do,
+# and manual Apply keeps using the browser flow exactly as before.
+DRY_RUN = os.environ.get("DRY_RUN", "true").strip().lower() not in ("0", "false", "no", "off")

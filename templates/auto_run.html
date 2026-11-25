@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Auto-Apply Run {{ run.id }} · Auto Apply{% endblock %}
+
+{% block content %}
+<div class="tab-header">
+  <h1>Run {{ run.id }}{% if run.dry_run %} <small>(dry run - nothing was applied)</small>{% endif %}</h1>
+  <a class="link-btn" href="{{ url_for('history.auto_runs') }}">&larr; All runs</a>
+</div>
+<p>
+  Started {{ run.started_at | local_dt or "—" }} · {{ run.status }} ·
+  found {{ run.found }}, passed {{ run.passed }},
+  {{ "would apply " ~ run.would_apply if run.dry_run else "applied " ~ run.applied }},
+  failed {{ run.failed }}, needs you {{ run.needs_you }}
+  {% if run.balance_before is not none %}· applications left {{ run.balance_before }}{% if run.balance_after is not none %} → {{ run.balance_after }}{% endif %}{% endif %}
+</p>
+{% if run.message %}<p>{{ run.message }}</p>{% endif %}
+
+<form class="filters" method="get">
+  <select name="verdict" onchange="this.form.submit()">
+    <option value="">Pass and Skip</option>
+    <option value="pass" {% if selected_verdict == "pass" %}selected{% endif %}>Pass only</option>
+    <option value="skip" {% if selected_verdict == "skip" %}selected{% endif %}>Skip only</option>
+  </select>
+</form>
+
+<table class="history-table">
+  <thead>
+    <tr><th>Verdict</th><th>Source</th><th>Score</th><th>Title</th><th>Company</th><th>Location</th><th>Rule</th><th>Reason</th><th>Action</th></tr>
+  </thead>
+  <tbody>
+    {% for d in decisions %}
+    <tr>
+      <td>{{ "Pass" if d.verdict == "pass" else "Skip" }}</td>
+      <td>{{ d.source }}</td>
+      <td>{{ d.match_score if d.match_score is not none else "—" }}</td>
+      <td><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title }}</a></td>
+      <td>{{ d.company or "—" }}</td>
+      <td>{{ d.location or "—" }}</td>
+      <td>{{ d.category or "—" }}</td>
+      <td class="history-detail">{{ d.reason or "—" }}</td>
+      <td>{{ d.action.replace("_", " ") }}{% if d.message %}<br><small>{{ d.message }}</small>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="empty-state">No candidates recorded.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
