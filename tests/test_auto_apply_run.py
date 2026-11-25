@@ -265,7 +265,7 @@ def test_resetting_the_cap_for_today_lets_runs_apply_again_and_expires_with_the_
     app.state[run_mod.CAP_RESET_KEY] = (datetime.utcnow() - timedelta(days=1)).isoformat()
     assert run_mod.applications_today() == 70
     # the company limit is separate: a company applied to earlier today is still off limits
-    assert "company-limit" in json.dumps(json.loads(go(app, FakeClient(True, rows=[feed_row(2101, companyName="Acme2101")])).skipped_json))
+    assert "company-limit" in json.dumps(json.loads(go(app, FakeClient(True, rows=[feed_row(2999, companyName="Acme2101", title="Backend Engineer")])).skipped_json))
 
 
 def test_the_last_run_before_the_cap_only_gets_what_is_left(app, monkeypatch):
