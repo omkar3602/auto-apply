@@ -1,5 +1,18 @@
 # Auto Apply
 
+Swipe through new-grad job listings, auto-fill the applications you like.
+A local Flask app that aggregates listings from JobRight and SimplifyJobs (~3,100 active),
+pulls full descriptions from Workday/Greenhouse/Lever/Ashby and other ATS pages,
+and queues browser-automated applications from a Tinder-style triage UI.
+
+https://github.com/user-attachments/assets/d7d61dc3-e2db-4225-a2be-a13617d25e09
+
+**Stack:** Python · Flask · SQLAlchemy · Playwright · PWA + Web Push
+
+**Interesting problems:** a crash-safe apply queue,
+description fetching across 8+ ATS layouts with graceful fallback,
+selectors matched against captured DOM to survive redeploys.
+
 Local Flask app that pulls job listings from multiple boards into a database
 and lets you triage them either as per-board card tabs or Tinder-style in
 **Swipe mode** (the default landing page - drag or flick a card, or use the
@@ -52,15 +65,6 @@ window like normal. The session is saved to `browser_profiles/jobright/` (or
 `browser_profiles/tsenta/`) and reused headlessly on every run after that. If
 a saved session ever expires, the same headed-login flow kicks in again
 automatically.
-
-Google actively blocks sign-in from browsers it detects as automated
-("This browser or app may not be secure"). To get past that, the app drives
-real installed Chrome (Playwright's `chrome` channel, not the bundled
-Chromium) and strips the most common automation tells (`navigator.webdriver`,
-the `--enable-automation` flag). If Google still rejects the sign-in even
-with that: close the window, delete the relevant folder under
-`browser_profiles/` to start with a completely clean profile, and try again —
-a profile that's already been flagged tends to keep getting flagged.
 
 ## If jobright.ai or tsenta.com selectors ever drift
 
