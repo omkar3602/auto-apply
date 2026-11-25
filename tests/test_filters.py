@@ -398,3 +398,15 @@ def test_seeded_history_blocks_repeats():
     assert dup.check(good(url="https://a.com/1"))
     assert dup.check(good(url="https://b.com/2"))            # same role via history
     assert dup.check(good(url="https://b.com/3", locations=["Boston, MA"])) is None
+
+
+@pytest.mark.parametrize("a,b,same", [
+    ("Walmart Inc.", "WALMART", True), ("Stripe, Inc.", "stripe", True), ("J.P. Morgan Chase & Co.", "JP Morgan Chase", True),
+    ("Acme LLC", "Acme Corp", True), ("Capgemini UK", "Capgemini", False), ("Visa", "Viasat", False), ("Inc", "Inc", True),
+])
+def test_company_key_matches_the_same_employer(a, b, same):
+    assert (f.company_key(a) == f.company_key(b)) is same
+
+
+def test_company_key_of_nothing_is_empty():
+    assert f.company_key(None) == "" and f.company_key("") == ""

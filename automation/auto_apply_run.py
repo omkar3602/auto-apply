@@ -31,7 +31,7 @@ from automation.tsenta_oauth import NeedsLogin, find_needs_login
 from db import db
 from models import AutoApplyDecision, AutoApplyRun, Job
 
-RUN_CAP = 40                      # applications per run
+RUN_CAP = 10                      # applications per run (was 40; lowered 2026-11-25 so one run can't spend the day's budget)
 DAILY_CAP = 60                    # applications per New York day
 SCRAPER_SOURCES = ("simplify", "jobright")
 LOCK_FILE = os.path.join(cfg.INSTANCE_DIR, "auto_apply.lock")
@@ -39,6 +39,9 @@ DAY_TZ = ZoneInfo("America/New_York")
 DECISION_KEEP_DAYS = 14
 DESCRIPTION_CHUNK = 20
 OUTCOME_WAIT_S = 180
+# What counts as "already applied to this company today": accepted by Tsenta (sent, in progress, or
+# waiting on you) or Tsenta saying it already has one. Failed or refused attempts don't.
+COMPANY_DAY_ACTIONS = ("applied", "pending", "needs_you", "already_applied")
 # What counts toward the daily cap: Tsenta accepted the application (a credit was used).
 SPENT_ACTIONS = ("applied", "pending", "needs_you", "failed")
 
@@ -85,14 +88,41 @@ def _today_start_utc(now_utc):
     return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
 
 
+CAP_RESET_KEY = "auto_apply_cap_reset_since"
+
+
+def _cap_window_start(now_utc):
+    """Start of the current daily-cap window: midnight New York, or later if the cap was reset today
+    (tools/reset_daily_cap.py). A reset only moves the start within the same day, so it expires by itself."""
+    start = _today_start_utc(now_utc)
+    try:
+        saved = schedule_state.load(CAP_RESET_KEY)
+        reset = datetime.fromisoformat(saved) if saved else None
+    except (TypeError, ValueError):
+        reset = None
+    return max(start, reset) if reset else start
+
+
 def applications_today(now_utc=None):
-    """Applications Tsenta accepted today (New York day) in real, non-dry runs."""
-    since = _today_start_utc(now_utc or datetime.utcnow())
+    """Applications Tsenta accepted in the current daily-cap window (the New York day, unless reset) in real runs."""
+    since = _cap_window_start(now_utc or datetime.utcnow())
     return (
         AutoApplyDecision.query.join(AutoApplyRun, AutoApplyRun.id == AutoApplyDecision.run_id)
         .filter(AutoApplyRun.dry_run.is_(False), AutoApplyDecision.created_at >= since, AutoApplyDecision.action.in_(SPENT_ACTIONS))
         .count()
     )
+
+
+def companies_applied_today(now_utc=None):
+    """Company keys the scheduler has applied to today (New York day) in real, non-dry runs."""
+    since = _today_start_utc(now_utc or datetime.utcnow())
+    rows = (
+        db.session.query(AutoApplyDecision.company)
+        .join(AutoApplyRun, AutoApplyRun.id == AutoApplyDecision.run_id)
+        .filter(AutoApplyRun.dry_run.is_(False), AutoApplyDecision.created_at >= since, AutoApplyDecision.action.in_(COMPANY_DAY_ACTIONS))
+        .all()
+    )
+    return {k for k in (filters.company_key(r[0]) for r in rows) if k}
 
 
 # ------------------------------------------------------------------ candidates
@@ -478,7 +508,7 @@ def _execute(app, run, dry, client_factory, now, notes, skipped):
         judged = _evaluate_tsenta(client, feed_rows, now, want_all=dry)
         judged += [(c, filters.evaluate(c, now)) for c in scrapers]
 
-        # Newest first across every source (best match breaks ties), so the 40-per-run cap is spent on
+        # Newest first across every source (best match breaks ties), so the per-run cap (RUN_CAP) is spent on
         # fresh postings and the same-job duplicate check below keeps the earliest-seen copy.
         judged.sort(key=_freshness_key)
         dup = _seed_duplicates()
@@ -494,6 +524,21 @@ def _execute(app, run, dry, client_factory, now, notes, skipped):
                     continue
             skipped[verdict.category] += 1
             _record(run, cand, verdict, now=now)
+
+        # One application per company per New York day: the freshest job (the list is newest first) wins.
+        taken = companies_applied_today()
+        eligible = []
+        for cand, verdict in passers:
+            key = filters.company_key(cand.company)
+            if key and key in taken:
+                verdict = filters.Verdict(False, "company-limit", f"already applied (or about to) to {cand.company} today - one application per company per day")
+                skipped["company-limit"] += 1
+                _record(run, cand, verdict, now=now)
+                continue
+            if key:
+                taken.add(key)
+            eligible.append((cand, verdict))
+        passers = eligible
 
         room = DAILY_CAP - applications_today()
         budget = max(0, min(RUN_CAP, room))

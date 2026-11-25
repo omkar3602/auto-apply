@@ -12,6 +12,7 @@ from automation import auto_apply_schedule as sched
 from automation import tsenta_mcp as tm
 from automation.tsenta_oauth import NeedsLogin
 from db import db
+from automation.auto_apply_run import RUN_CAP
 from models import AutoApplyDecision, AutoApplyRun, Job
 
 
@@ -216,44 +217,80 @@ def test_running_out_of_credits_stops_the_scraper_applies_too(app, monkeypatch):
 
 # ------------------------------------------------------------------ caps and order
 
-def test_a_run_applies_to_at_most_40_best_scores_first(app, monkeypatch):
+def fill_runs(app, count, start=1):
+    """`count` live runs, each offered more than RUN_CAP fresh jobs from distinct companies."""
+    clients = []
+    for k in range(count):
+        base = start + k * 100
+        client = FakeClient(True, rows=[feed_row(base + i, score=100 - i) for i in range(RUN_CAP + 5)])
+        go(app, client)
+        clients.append(client)
+    return clients
+
+
+def test_a_run_applies_to_at_most_10_best_scores_first(app, monkeypatch):
     monkeypatch.setattr(cfg, "DRY_RUN", False)
-    client = FakeClient(True, rows=[feed_row(i, score=i) for i in range(1, 51)])
+    assert RUN_CAP == 10
+    client = FakeClient(True, rows=[feed_row(i, score=i) for i in range(1, 31)])
     run = go(app, client)
-    assert len(client.applied_ids) == 40 and client.applied_ids[0] == "t50" and "t11" in client.applied_ids and "t10" not in client.applied_ids
-    assert (run.passed, run.applied) == (50, 40)
-    assert AutoApplyDecision.query.filter_by(action="capped").count() == 10
+    assert len(client.applied_ids) == 10 and client.applied_ids[0] == "t30" and "t21" in client.applied_ids and "t20" not in client.applied_ids
+    assert (run.passed, run.applied) == (30, 10)
+    assert AutoApplyDecision.query.filter_by(action="capped").count() == 20
 
 
 def test_the_daily_cap_of_60_holds_across_runs(app, monkeypatch):
     monkeypatch.setattr(cfg, "DRY_RUN", False)
-    first = FakeClient(True, rows=[feed_row(i, score=100 - i) for i in range(1, 51)])
-    go(app, first)
-    second = FakeClient(True, rows=[feed_row(i, score=100 - i) for i in range(51, 101)])
-    run2 = go(app, second)
-    assert len(first.applied_ids) == 40 and len(second.applied_ids) == 20
+    clients = fill_runs(app, 6)
+    assert [len(c.applied_ids) for c in clients] == [10] * 6
     assert run_mod.applications_today() == 60
-    third = FakeClient(True, rows=[feed_row(i) for i in range(101, 110)])
-    run3 = go(app, third)
-    assert third.applied_ids == [] and "daily cap" in run3.message
+    seventh = FakeClient(True, rows=[feed_row(i) for i in range(701, 710)])
+    run7 = go(app, seventh)
+    assert seventh.applied_ids == [] and "daily cap" in run7.message
+
+
+def test_resetting_the_cap_for_today_lets_runs_apply_again_and_expires_with_the_day(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    fill_runs(app, 6)
+    assert run_mod.applications_today() == 60
+    blocked = FakeClient(True, rows=[feed_row(i) for i in range(2001, 2005)])
+    go(app, blocked)
+    assert blocked.applied_ids == []
+    app.state[run_mod.CAP_RESET_KEY] = (datetime.utcnow() + timedelta(seconds=1)).isoformat()   # what the tool writes
+    import time; time.sleep(1.2)
+    assert run_mod.applications_today() == 0
+    again = FakeClient(True, rows=[feed_row(i) for i in range(2101, 2125)])
+    go(app, again)
+    assert len(again.applied_ids) == 10 and run_mod.applications_today() == 10
+    # a reset left over from yesterday changes nothing
+    app.state[run_mod.CAP_RESET_KEY] = (datetime.utcnow() - timedelta(days=1)).isoformat()
+    assert run_mod.applications_today() == 70
+    # the company limit is separate: a company applied to earlier today is still off limits
+    assert "company-limit" in json.dumps(json.loads(go(app, FakeClient(True, rows=[feed_row(2101, companyName="Acme2101")])).skipped_json))
+
+
+def test_the_last_run_before_the_cap_only_gets_what_is_left(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    fill_runs(app, 5)
+    app.pushes.clear()
+    last = FakeClient(True, rows=[feed_row(i) for i in range(801, 820)])
+    go(app, last)
+    assert len(last.applied_ids) == 10 and run_mod.applications_today() == 60
 
 
 def test_one_notification_the_day_the_cap_is_hit(app, monkeypatch):
     monkeypatch.setattr(cfg, "DRY_RUN", False)
-    go(app, FakeClient(True, rows=[feed_row(i, score=100 - i) for i in range(1, 51)]))
-    assert len(app.pushes) == 1 and "cap" not in app.pushes[0][0].lower()           # 40 of 60: only the run summary
-    go(app, FakeClient(True, rows=[feed_row(i) for i in range(51, 101)]))           # reaches 60
-    titles = [p[0] for p in app.pushes]
-    assert sum("Daily cap reached: 60/60" in t for t in titles) == 1
-    go(app, FakeClient(True, rows=[feed_row(i) for i in range(101, 110)]))          # a later run the same day
+    fill_runs(app, 5)
+    assert not any("Daily cap" in p[0] for p in app.pushes)                         # 50 of 60: only run summaries
+    fill_runs(app, 1, start=900)                                                    # reaches 60
+    assert sum("Daily cap reached: 60/60" in p[0] for p in app.pushes) == 1
+    go(app, FakeClient(True, rows=[feed_row(i) for i in range(1001, 1010)]))        # a later run the same day
     assert sum("Daily cap reached" in p[0] for p in app.pushes) == 1
 
 
 def test_the_cap_notification_comes_again_the_next_day(app, monkeypatch):
     monkeypatch.setattr(cfg, "DRY_RUN", False)
     app.state[run_mod.CAP_STATE_KEY] = "2000-01-01"
-    go(app, FakeClient(True, rows=[feed_row(i, score=100 - i) for i in range(1, 51)]))
-    go(app, FakeClient(True, rows=[feed_row(i) for i in range(51, 101)]))
+    fill_runs(app, 6)
     assert sum("Daily cap reached" in p[0] for p in app.pushes) == 1
 
 
@@ -293,10 +330,10 @@ def test_newest_first_across_every_source_with_score_breaking_ties(app):
 
 def test_the_cap_is_spent_on_fresh_postings_not_old_high_scores(app, monkeypatch):
     monkeypatch.setattr(cfg, "DRY_RUN", False)
-    rows = [feed_row(i, 99, datePosted=iso(20)) for i in range(1, 41)] + [feed_row(100 + i, 50, datePosted=iso(0.5)) for i in range(1, 6)]
+    rows = [feed_row(i, 99, datePosted=iso(20)) for i in range(1, 21)] + [feed_row(100 + i, 50, datePosted=iso(0.5)) for i in range(1, 6)]
     client = FakeClient(True, rows=rows)
     go(app, client)
-    assert len(client.applied_ids) == 40
+    assert len(client.applied_ids) == 10
     assert all(f"t{100 + i}" in client.applied_ids for i in range(1, 6))
 
 
@@ -349,10 +386,56 @@ def test_never_applies_twice_to_the_same_job_or_cross_post(app):
     assert skipped.get("duplicate") == 2 and run.passed == 1                         # same URL as the applied one; scraper twin of t9
 
 
+def test_one_application_per_company_per_day_freshest_wins(app):
+    rows = [feed_row(1, companyName="Walmart Inc.", datePosted=iso(5), title="Data Engineer"), feed_row(2, companyName="WALMART", datePosted=iso(1)),
+            feed_row(3, companyName="Walmart", datePosted=iso(9), title="Backend Engineer"), feed_row(4, companyName="Visa")]
+    run = go(app, FakeClient(True, rows=rows))
+    assert run.passed == 2 and json.loads(run.skipped_json) == {"company-limit": 2}
+    winner = AutoApplyDecision.query.filter_by(verdict="pass").all()
+    assert {d.tsenta_job_id for d in winner} == {"t2", "t4"}                       # the 1-hour-old Walmart job, and Visa
+    skipped = AutoApplyDecision.query.filter_by(category="company-limit").all()
+    assert {d.tsenta_job_id for d in skipped} == {"t1", "t3"} and "one application per company per day" in skipped[0].reason
+
+
+def test_the_company_limit_carries_across_runs_and_counts_needs_you_and_already_applied(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    go(app, FakeClient(True, rows=[feed_row(1, companyName="Acme"), feed_row(2, companyName="Beta")], outcome_kind="needs_you"))
+    second = FakeClient(True, rows=[feed_row(3, companyName="Acme Inc"), feed_row(4, companyName="Beta LLC"), feed_row(5, companyName="Gamma")])
+    run = go(app, second)
+    assert second.applied_ids == ["t5"] and json.loads(run.skipped_json) == {"company-limit": 2}
+    # already-applied answers also count
+    third = FakeClient(True, rows=[feed_row(6, companyName="Delta")], apply_category="already_applied")
+    go(app, third)
+    fourth = FakeClient(True, rows=[feed_row(7, companyName="Delta Corp")])
+    assert go(app, fourth).passed == 0 and fourth.applied_ids == []
+
+
+def test_failed_and_refused_applications_do_not_use_up_a_company(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    go(app, FakeClient(True, rows=[feed_row(1, companyName="Acme")], apply_category="error"))
+    again = FakeClient(True, rows=[feed_row(2, companyName="Acme")])
+    go(app, again)
+    assert again.applied_ids == ["t2"]
+
+
+def test_dry_runs_neither_count_toward_nor_are_blocked_by_the_company_limit(app, monkeypatch):
+    go(app, FakeClient(True, rows=[feed_row(1, companyName="Acme")]))               # dry
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    live = FakeClient(True, rows=[feed_row(1, companyName="Acme")])
+    go(app, live)
+    assert live.applied_ids == ["t1"]
+
+
+def test_a_missing_company_name_is_never_limited(app):
+    rows = [feed_row(1, companyName=None), feed_row(2, companyName=None)]
+    assert go(app, FakeClient(True, rows=rows)).passed == 2
+
+
 def test_same_role_in_another_city_is_applied_to(app):
     rows = [feed_row(1, locations=["New York, NY"], companyName="Same", companyWebsite="same.com"),
             feed_row(2, locations=["Boston, MA"], companyName="Same", companyWebsite="same.com")]
-    assert go(app, FakeClient(True, rows=rows)).passed == 2
+    run = go(app, FakeClient(True, rows=rows))
+    assert run.passed == 1 and json.loads(run.skipped_json) == {"company-limit": 1}   # different city is no longer enough: one per company per day
 
 
 def test_zapply_and_speedyapply_are_no_longer_used(app):

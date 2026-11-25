@@ -35,7 +35,7 @@ NO_SPONSORSHIP = "NO_SPONSORSHIP"
 # What the per-run summary counts, in display order.
 CATEGORIES = (
     "title", "location", "recency", "experience", "blocked-domain",
-    "no-apply-list", "sponsorship", "clearance", "unsupported-ats", "duplicate",
+    "no-apply-list", "sponsorship", "clearance", "unsupported-ats", "duplicate", "company-limit",
 )
 
 
@@ -386,6 +386,18 @@ def _name_key(name):
     text = re.sub(r"(?<![a-z0-9])([a-z])\.(?=[a-z](?:\.|(?![a-z0-9])))", r"\1", text)   # J.P. Morgan -> jp. morgan
     text = re.sub(r"[^a-z0-9()]+", " ", text)         # then amazon.com -> amazon com
     return re.sub(r"\s+", " ", text).strip()
+
+
+_LEGAL_SUFFIXES = {"and", "inc", "incorporated", "llc", "llp", "lp", "ltd", "limited", "corp", "corporation", "co", "company", "plc", "gmbh", "holdings"}
+
+
+def company_key(name):
+    """One employer, one string: lowercase, punctuation and accents gone, trailing legal words
+    (Inc, LLC, Corp, ...) dropped. "Walmart Inc." and "WALMART" match; "Capgemini UK" is a different key."""
+    words = _name_key(name or "").split()
+    while len(words) > 1 and words[-1] in _LEGAL_SUFFIXES:
+        words.pop()
+    return " ".join(words)
 
 
 def rule_never_apply(c, now=None):
