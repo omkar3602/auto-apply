@@ -44,6 +44,7 @@ Key structural facts this scraper relies on:
 import json
 import os
 import re
+from datetime import datetime, timezone
 
 from playwright.sync_api import sync_playwright
 
@@ -249,6 +250,7 @@ def _extract_card_basic(card):
             "salary": _metadata_value(card, "money"),
             "seniority": _metadata_value(card, "seniority"),
             "years_exp": _metadata_value(card, "date"),
+            "label_read_at": datetime.now(timezone.utc).isoformat(),   # "2 hours ago" is relative to this
         }),
     }
 

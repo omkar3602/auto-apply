@@ -329,18 +329,18 @@ def test_no_credits_means_no_applies_and_a_note(app, monkeypatch):
 
 
 def test_newest_first_across_every_source_with_score_breaking_ties(app):
-    rows = [feed_row(1, 99, datePosted=iso(22)), feed_row(2, 60, datePosted=iso(0.2)), feed_row(3, 70, datePosted=iso(2)), feed_row(4, 90, datePosted=iso(2))]
+    rows = [feed_row(1, 99, datePosted=iso(2.8)), feed_row(2, 60, datePosted=iso(0.2)), feed_row(3, 70, datePosted=iso(2)), feed_row(4, 90, datePosted=iso(2))]
     scraper_job(1)                                                       # simplify, posted ~2h ago per its raw date
     run = go(app, FakeClient(True, rows=rows))
     order = [d.tsenta_job_id or d.source for d in AutoApplyDecision.query.filter_by(verdict="pass").order_by(AutoApplyDecision.id)]
-    assert order[0] == "t2" and order[-1] == "t1"                        # 12 minutes old first, 22 hours old last
+    assert order[0] == "t2" and order[-1] == "t1"                        # 12 minutes old first, 2.8 hours old last
     assert order.index("t4") < order.index("t3")                         # same age: better match first
     assert set(order[1:4]) == {"t4", "t3", "simplify"}
 
 
 def test_the_cap_is_spent_on_fresh_postings_not_old_high_scores(app, monkeypatch):
     monkeypatch.setattr(cfg, "DRY_RUN", False)
-    rows = [feed_row(i, 99, datePosted=iso(20)) for i in range(1, 21)] + [feed_row(100 + i, 50, datePosted=iso(0.5)) for i in range(1, 6)]
+    rows = [feed_row(i, 99, datePosted=iso(2.5)) for i in range(1, 21)] + [feed_row(100 + i, 50, datePosted=iso(0.5)) for i in range(1, 6)]
     client = FakeClient(True, rows=rows)
     go(app, client)
     assert len(client.applied_ids) == 10
@@ -348,20 +348,20 @@ def test_the_cap_is_spent_on_fresh_postings_not_old_high_scores(app, monkeypatch
 
 
 def test_age_is_recorded_per_candidate_and_as_a_median_for_the_run(app):
-    rows = [feed_row(1, datePosted=iso(0.5)), feed_row(2, datePosted=iso(1)), feed_row(3, datePosted=iso(3))]
+    rows = [feed_row(1, datePosted=iso(0.5)), feed_row(2, datePosted=iso(1)), feed_row(3, datePosted=iso(2.5))]
     run = go(app, FakeClient(True, rows=rows))
     ages = {d.tsenta_job_id: d.age_minutes for d in AutoApplyDecision.query.all()}
-    assert 28 <= ages["t1"] <= 32 and 58 <= ages["t2"] <= 62 and 178 <= ages["t3"] <= 182
+    assert 28 <= ages["t1"] <= 32 and 58 <= ages["t2"] <= 62 and 148 <= ages["t3"] <= 152
     assert 58 <= run.median_age_min <= 62
     assert "median age" in app.pushes[0][1]
     page = app.test_client().get(f"/history/auto/runs/{run.id}").data.decode()
     assert "30m" in page or "29m" in page or "31m" in page
 
 
-def test_postings_over_24_hours_old_are_skipped_whatever_their_score(app):
-    run = go(app, FakeClient(True, rows=[feed_row(1, 99, datePosted=iso(30)), feed_row(2, 50, datePosted=iso(23))]))
+def test_postings_over_3_hours_old_are_skipped_whatever_their_score(app):
+    run = go(app, FakeClient(True, rows=[feed_row(1, 99, datePosted=iso(3.5)), feed_row(2, 50, datePosted=iso(2.5))]))
     assert run.passed == 1 and json.loads(run.skipped_json) == {"recency": 1}
-    assert "24h" in AutoApplyDecision.query.filter_by(tsenta_job_id="t1").one().reason
+    assert "over the 3h limit" in AutoApplyDecision.query.filter_by(tsenta_job_id="t1").one().reason
 
 
 def test_jobs_with_no_known_age_go_last(app):
@@ -397,8 +397,8 @@ def test_never_applies_twice_to_the_same_job_or_cross_post(app):
 
 
 def test_one_application_per_company_per_day_freshest_wins(app):
-    rows = [feed_row(1, companyName="Walmart Inc.", datePosted=iso(5), title="Data Engineer"), feed_row(2, companyName="WALMART", datePosted=iso(1)),
-            feed_row(3, companyName="Walmart", datePosted=iso(9), title="Backend Engineer"), feed_row(4, companyName="Visa")]
+    rows = [feed_row(1, companyName="Walmart Inc.", datePosted=iso(2), title="Data Engineer"), feed_row(2, companyName="WALMART", datePosted=iso(1)),
+            feed_row(3, companyName="Walmart", datePosted=iso(2.5), title="Backend Engineer"), feed_row(4, companyName="Visa")]
     run = go(app, FakeClient(True, rows=rows))
     assert run.passed == 2 and json.loads(run.skipped_json) == {"company-limit": 2}
     winner = AutoApplyDecision.query.filter_by(verdict="pass").all()

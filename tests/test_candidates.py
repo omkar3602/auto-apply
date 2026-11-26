@@ -1,6 +1,6 @@
 """Source -> Candidate adapters, and the rules run on real-shaped data."""
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +9,13 @@ from automation import candidates as cands
 from automation import filters as f
 
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture
+def wide_window(monkeypatch):
+    """The real feed rows below are hours old. These tests are about the other rules, so
+    widen the age limit; the limit itself is tested in test_filters and below."""
+    monkeypatch.setattr(f, "MAX_AGE", timedelta(hours=48))
 
 # Rows copied from a real get-job-recommendations response (2026-11-25), trimmed to the fields we read.
 REAL_FEED = {
@@ -45,6 +52,7 @@ def test_from_tsenta_maps_every_field_the_rules_use():
     assert c.ref == "6cff4799-e2ae-4783-8f4c-bf88cfa760e5"
 
 
+@pytest.mark.usefixtures("wide_window")
 @pytest.mark.parametrize("key,category", [
     ("amazon_de", "no-apply-list"), ("chase_swe", "no-apply-list"), ("amazon_sde", "no-apply-list"), ("truist_de", "experience"),
 ])
@@ -53,6 +61,7 @@ def test_real_feed_rows_are_skipped_for_the_right_reason(key, category):
     assert not verdict.passed and verdict.category == category, verdict
 
 
+@pytest.mark.usefixtures("wide_window")
 def test_a_good_feed_row_passes():
     row = {**REAL_FEED["truist_de"], "companyName": "Eight Sleep", "companyWebsite": "eightsleep.com", "yearsOfExperienceMin": None,
            "url": "https://jobs.ashbyhq.com/eightsleep/abc", "locations": ["New York City"], "datePosted": "2026-11-20T02:00:00.000Z",
@@ -61,11 +70,13 @@ def test_a_good_feed_row_passes():
     assert f.evaluate(cands.from_tsenta(row), NOW).passed
 
 
+@pytest.mark.usefixtures("wide_window")
 def test_feed_row_that_tsenta_cannot_apply_to_is_skipped():
     row = {**REAL_FEED["truist_de"], "companyName": "Acme", "companyWebsite": "acme.com", "yearsOfExperienceMin": 2, "isSupportedAts": False}
     assert f.evaluate(cands.from_tsenta(row), NOW).category == "unsupported-ats"
 
 
+@pytest.mark.usefixtures("wide_window")
 def test_feed_description_can_still_reject_it():
     row = {**REAL_FEED["truist_de"], "companyName": "Acme", "companyWebsite": "acme.com", "yearsOfExperienceMin": None}
     assert f.evaluate(cands.from_tsenta(row, description="Candidates must be a U.S. citizen."), NOW).category == "sponsorship"
@@ -120,9 +131,24 @@ def test_from_jobright_reads_the_experience_text(years_exp, expected):
 def test_jobright_uses_the_label_and_skips_reposts_and_old_days():
     ok = cands.from_job(job(source="jobright", posted_label="2 hours ago", raw_json="{}"))
     assert ok.posted_at is None and f.evaluate(ok, NOW).passed
-    assert f.evaluate(cands.from_job(job(source="jobright", posted_label="Reposted 1 hour ago")), NOW).category == "recency"
-    assert f.evaluate(cands.from_job(job(source="jobright", posted_label="3 days ago")), NOW).category == "recency"
-    assert f.evaluate(cands.from_job(job(source="jobright", posted_label="20 hours ago")), NOW).passed
+    for label in ("Reposted 1 hour ago", "3 days ago", "3 hours ago", "20 hours ago"):
+        assert f.evaluate(cands.from_job(job(source="jobright", posted_label=label)), NOW).category == "recency", label
+
+
+def test_a_jobright_label_ages_from_when_it_was_read():
+    read = (NOW - timedelta(hours=5)).isoformat()                       # "14 minutes ago", seen 5 hours ago
+    stale = cands.from_job(job(source="jobright", posted_label="14 minutes ago", raw_json=json.dumps({"label_read_at": read})))
+    assert stale.posted_at == NOW - timedelta(hours=5, minutes=14) and f.evaluate(stale, NOW).category == "recency"
+    fresh = cands.from_job(job(source="jobright", posted_label="1 hour ago",
+                               raw_json=json.dumps({"label_read_at": (NOW - timedelta(minutes=30)).isoformat()})))
+    assert fresh.posted_at == NOW - timedelta(hours=1, minutes=30) and f.evaluate(fresh, NOW).passed
+    # rows stored before the read time was recorded: dated from when they were first saved (naive UTC)
+    old_row = job(source="jobright", posted_label="1 hour ago", raw_json="{}")
+    old_row.created_at = datetime(2026, 11, 20, 6, 0)
+    assert cands.from_job(old_row).posted_at == datetime(2026, 11, 20, 5, 0, tzinfo=timezone.utc)
+    # a repost stays undatable even with a read time
+    repost = cands.from_job(job(source="jobright", posted_label="Reposted 1 hour ago", raw_json=json.dumps({"label_read_at": NOW.isoformat()})))
+    assert repost.posted_at is None and f.evaluate(repost, NOW).category == "recency"
 
 
 def test_jobright_over_five_years_is_skipped():

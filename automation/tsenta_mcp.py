@@ -51,7 +51,7 @@ log = logging.getLogger(__name__)
 
 NeedsLogin = oauth.NeedsLogin
 DEFAULT_LOCATION_SETS = (["country:US"], ["state:NY"])
-# The scheduler's age limit is 24h (filters.MAX_AGE), so ask Tsenta for exactly that. A 7-day window also
+# Ask Tsenta for the last 24h (the scheduler's own limit, filters.MAX_AGE, is narrower). A 7-day window also
 # made the New York search fail with TEMPORARILY_UNAVAILABLE on 2026-11-25, and its 400-result page limit
 # was being spent on postings the age rule then threw away.
 FEED_DATE_WINDOW = "24h"

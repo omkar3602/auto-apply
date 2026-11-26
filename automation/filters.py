@@ -10,7 +10,7 @@ passed in), so the whole module is plain-Python testable. Sources are turned
 into `Candidate`s by automation/candidates.py.
 
 Decisions that shaped these rules (2026-11-25):
-- 24-hour recency (was 72h until 2026-11-25); JobRight labels of a day or more ("1 day ago", "3 days ago") and "Reposted ..." labels can't be
+- 3-hour recency (was 72h until 2026-11-25, then 24h until 2026-11-26); JobRight labels of a day or more ("1 day ago", "3 days ago") and "Reposted ..." labels can't be
   verified, so they are skipped. Exact timestamps (Tsenta, Simplify) are used
   when present.
 - The same role in different cities is several roles (apply to all). Only the
@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-MAX_AGE = timedelta(hours=24)          # permanent age limit for every source
+MAX_AGE = timedelta(hours=3)           # permanent age limit for every source (24h until 2026-11-26)
 MAX_YEARS = 5
 NO_SPONSORSHIP = "NO_SPONSORSHIP"
 
@@ -298,9 +298,9 @@ _UNIT_SECONDS = {"se": 1, "mi": 60, "ho": 3600, "hr": 3600, "da": 86400, "we": 6
 _LABEL_AGE = re.compile(r"(\d+)\s*(second|sec|minute|min|hour|hr|day|week|wk|month|mo|year|yr)s?\.?\s*ago", re.I)
 
 
-def _label_age(label):
-    """-> (timedelta or None, reason-if-unverifiable). "N days ago" means
-    N*24h or more, so 3+ days is past the limit and 1-2 days still fits."""
+def label_age(label):
+    """-> (timedelta or None, reason-if-unverifiable). "N hours ago" means at
+    least N hours, so at a 3h limit "2 hours ago" fits and "3 hours ago" doesn't."""
     text = (label or "").strip().lower()
     if not text:
         return None, "no posting time"
@@ -323,24 +323,24 @@ def estimated_age(c, now=None):
     now = _as_utc(now) if now else datetime.now(timezone.utc)
     if c.posted_at is not None:
         return max(timedelta(0), now - _as_utc(c.posted_at))
-    return _label_age(c.posted_label)[0]
+    return label_age(c.posted_label)[0]
 
 
 def rule_recency(c, now=None):
-    """Posted within MAX_AGE (24 hours) - and provably so: no verifiable time, no apply."""
+    """Posted within MAX_AGE (3 hours) - and provably so: no verifiable time, no apply."""
     now = _as_utc(now) if now else datetime.now(timezone.utc)
     if c.posted_at is not None:
         age = now - _as_utc(c.posted_at)
         if age < -timedelta(hours=1):
             return "posting time is in the future - can't verify"
-        described = f"{age.total_seconds() / 3600:.0f}h ago"
+        described = f"{age.total_seconds() / 3600:.1f}h ago"
     else:
-        age, why = _label_age(c.posted_label)
+        age, why = label_age(c.posted_label)
         if age is None:
             return f"posting time can't be verified: {why}"
         described = f"'{c.posted_label.strip()}'"
-    # An exact time may be exactly 24h old; a label like "1 day ago" only says
-    # "at least 24h", so there it already counts as over.
+    # An exact time may be exactly at the limit; a label like "3 hours ago" only says
+    # "at least 3h", so there it already counts as over.
     over = age > MAX_AGE if c.posted_at is not None else age >= MAX_AGE
     if over:
         return f"posted {described}, over the {int(MAX_AGE.total_seconds() // 3600)}h limit"

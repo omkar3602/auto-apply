@@ -8,7 +8,7 @@ What each source can and can't tell the rules (2026-11-25):
 
 | field        | Tsenta feed        | Simplify (raw_json)     | JobRight (raw_json)        |
 |--------------|--------------------|-------------------------|----------------------------|
-| posted time  | exact `datePosted` | exact `date_posted`     | label only ("2 hours ago") |
+| posted time  | exact `datePosted` | exact `date_posted`     | label, dated from when read |
 | experience   | `yearsOfExperienceMin` | none -> description | `years_exp` text           |
 | sponsorship  | enum               | always "Other" (= unknown) | none -> description     |
 | website      | `companyWebsite`   | `company_url`           | none (name + URL only)     |
@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from automation.filters import Candidate, normalize_sponsorship, parse_min_years
+from automation.filters import Candidate, label_age, normalize_sponsorship, parse_min_years
 
 
 def parse_iso(value):
@@ -89,6 +89,19 @@ def from_simplify(job):
     )
 
 
+def _jobright_posted_at(job, raw):
+    """JobRight only says "2 hours ago", which is true when the card was read and then
+    stays frozen in our row. Pin it to a time: when it was read, minus that age. None
+    for labels that can't be dated (reposts included), which the recency rule then skips."""
+    age = label_age(job.posted_label)[0]
+    read_at = parse_iso(raw.get("label_read_at")) or getattr(job, "created_at", None)  # naive = UTC
+    if age is None or read_at is None:
+        return None
+    if read_at.tzinfo is None:
+        read_at = read_at.replace(tzinfo=timezone.utc)
+    return read_at - age
+
+
 def from_jobright(job):
     raw = _raw(job)
     return Candidate(
@@ -97,6 +110,7 @@ def from_jobright(job):
         company=job.company,
         url=job.job_url or "",
         locations=[job.location] if job.location else [],
+        posted_at=_jobright_posted_at(job, raw),
         posted_label=job.posted_label,
         years_min=parse_min_years(raw.get("years_exp"), lenient=True),
         description=job.description,
