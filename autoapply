@@ -171,7 +171,7 @@ require_repo() {
     symlink this script into the repo instead of copying it
     edit DEFAULT_REPO at the top of this script"
   [ -x "$PYTHON" ] || die "no virtualenv at $PYTHON
-  create it with: cd '$REPO' && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  create it with: cd '$REPO' && /opt/homebrew/bin/python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt"
 }
 
 cmd_start() {

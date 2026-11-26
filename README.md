@@ -41,7 +41,7 @@ Job boards wired up so far:
 ## Setup
 
 ```bash
-python3 -m venv .venv
+/opt/homebrew/bin/python3.12 -m venv .venv   # Homebrew Python 3.12 (CI runs 3.12 too)
 source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chrome
