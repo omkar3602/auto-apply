@@ -51,6 +51,12 @@ log = logging.getLogger(__name__)
 
 NeedsLogin = oauth.NeedsLogin
 DEFAULT_LOCATION_SETS = (["country:US"], ["state:NY"])
+# The scheduler's age limit is 24h (filters.MAX_AGE), so ask Tsenta for exactly that. A 7-day window also
+# made the New York search fail with TEMPORARILY_UNAVAILABLE on 2026-11-25, and its 400-result page limit
+# was being spent on postings the age rule then threw away.
+FEED_DATE_WINDOW = "24h"
+FEED_ATTEMPTS = 3                 # tries per feed page before giving up on that search
+FEED_RETRY_WAIT_S = (2, 6)        # pauses before the 2nd and 3rd try
 APPLY_CHUNK = 10                  # jobs per apply-to-job call: bounds the damage if a call fails midway
 DESCRIPTION_BUDGET = 48_000       # get-jobs-by-ids shares this many characters across a call
 _SESSION_LOCK = threading.Lock()  # one Tsenta session at a time in this process (token refresh isn't re-entrant)
@@ -483,21 +489,56 @@ class TsentaClient:
         payload = self._call("get-job-recommendations", args)
         return list(payload.get("jobs") or []), bool(payload.get("hasMore")), payload
 
-    def feed(self, *, search=SEARCH_QUERY, exclude_search=EXCLUDE_QUERY, location_sets=DEFAULT_LOCATION_SETS, date_posted="7d",
+    def _feed_page(self, **kwargs):
+        """One feed page, retried when Tsenta says it is temporarily unavailable or the call drops.
+        Returns (jobs, has_more, payload); raises TsentaError once the attempts are used up, or at
+        once for NO_PROFILE (retrying can't fix an unfinished profile). A sign-in problem always propagates."""
+        last = None
+        for attempt in range(FEED_ATTEMPTS):
+            if attempt:
+                self._sleep(FEED_RETRY_WAIT_S[min(attempt - 1, len(FEED_RETRY_WAIT_S) - 1)])
+            try:
+                jobs, more, payload = self.recommendations(**kwargs)
+            except NeedsLogin:
+                raise
+            except TsentaError as exc:
+                last = exc
+                continue
+            reason = payload.get("zeroResultReason")
+            if not jobs and reason == "NO_PROFILE":
+                raise TsentaError("Tsenta feed unavailable (NO_PROFILE): finish your Tsenta profile")
+            if not jobs and reason == "TEMPORARILY_UNAVAILABLE":
+                last = TsentaError("Tsenta feed unavailable (TEMPORARILY_UNAVAILABLE)")
+                continue
+            return jobs, more, payload
+        raise last
+
+    def feed(self, *, search=SEARCH_QUERY, exclude_search=EXCLUDE_QUERY, location_sets=DEFAULT_LOCATION_SETS, date_posted=FEED_DATE_WINDOW,
              limit=50, max_pages=20, needs_sponsorship=True):
         """Every page of the feed for each location set, de-duplicated by Tsenta job id.
-        Notes about odd replies (zero-result reasons) end up in `last_feed_notes`."""
+
+        A page that keeps failing (after retries) ends only its own location set: what was already
+        fetched is kept and a note is added to `last_feed_notes`. Only a feed that produced nothing at
+        all because of failures raises. Notes about odd replies (zero-result reasons) end up there too."""
         self.last_feed_notes = []
         found = {}
+        failure = None
         for locations in location_sets:
             for page in range(1, max_pages + 1):
-                jobs, more, payload = self.recommendations(
-                    search=search, exclude_search=exclude_search, locations=locations, date_posted=date_posted,
-                    limit=limit, page=page, needs_sponsorship=needs_sponsorship)
+                try:
+                    jobs, more, payload = self._feed_page(
+                        search=search, exclude_search=exclude_search, locations=locations, date_posted=date_posted,
+                        limit=limit, page=page, needs_sponsorship=needs_sponsorship)
+                except TsentaError as exc:
+                    if "NO_PROFILE" in str(exc):
+                        raise
+                    failure = exc
+                    self.last_feed_notes.append(f"{locations}: page {page} failed after {FEED_ATTEMPTS} tries ({exc}); kept the {len(found)} job(s) fetched so far")
+                    break
                 reason = payload.get("zeroResultReason")
-                if not jobs and reason:
-                    if reason in ("NO_PROFILE", "TEMPORARILY_UNAVAILABLE"):
-                        raise TsentaError(f"Tsenta feed unavailable ({reason}) for {locations}")
+                # PAGINATION_EXCEEDED just means "no page after the last one" once we
+                # already have results; it isn't a problem worth reporting.
+                if not jobs and reason and not (reason == "PAGINATION_EXCEEDED" and found):
                     self.last_feed_notes.append(f"{locations}: no results ({reason})")
                 for job in jobs:
                     if job.get("id"):
@@ -506,6 +547,8 @@ class TsentaClient:
                     break
             else:
                 self.last_feed_notes.append(f"{locations}: stopped at {max_pages} pages")
+        if not found and failure is not None:
+            raise failure
         return list(found.values())
 
     def descriptions(self, job_ids, max_chars=6000):

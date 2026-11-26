@@ -144,7 +144,7 @@ def test_feed_pages_each_location_set_and_dedupes():
     assert [j["id"] for j in c.feed()] == ["a", "b", "c", "d"]
     sent = [a for _, a, _ in c._call.calls]
     assert [(a["locations"], a["page"]) for a in sent] == [(["country:US"], 1), (["country:US"], 2), (["state:NY"], 1)]
-    assert all(a["limit"] == 50 and a["datePosted"] == "7d" and a["needsSponsorship"] is True and a["excludeSearch"].startswith("Staff|") for a in sent)
+    assert all(a["limit"] == 50 and a["datePosted"] == "24h" and a["needsSponsorship"] is True and a["excludeSearch"].startswith("Staff|") for a in sent)
     assert "jobTypes" not in sent[0]                                        # no ENTRY_LEVEL restriction
 
 
@@ -157,6 +157,43 @@ def test_feed_notes_odd_replies_and_raises_when_the_feed_is_down():
     no_profile = client({"get-job-recommendations": {"jobs": [], "zeroResultReason": "NO_PROFILE"}})
     with pytest.raises(tm.TsentaError):
         no_profile.feed()
+
+
+def test_a_temporarily_unavailable_page_is_retried_then_succeeds():
+    attempts = {"n": 0}
+
+    def reply(args):
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            return {"jobs": [], "zeroResultReason": "TEMPORARILY_UNAVAILABLE"}
+        return {"jobs": [{"id": "a"}], "hasMore": False}
+    c = client({"get-job-recommendations": reply})
+    assert [j["id"] for j in c.feed(location_sets=(["country:US"],))] == ["a"] and attempts["n"] == 3
+
+
+def test_one_failing_search_keeps_what_the_others_fetched():
+    def reply(args):
+        if args["locations"] == ["state:NY"]:
+            return {"jobs": [], "zeroResultReason": "TEMPORARILY_UNAVAILABLE"}
+        return {"jobs": [{"id": f"us{args['page']}"}], "hasMore": args["page"] < 2}
+    c = client({"get-job-recommendations": reply})
+    assert [j["id"] for j in c.feed()] == ["us1", "us2"]                             # the US pages survive the NY failure
+    assert any("state:NY" in n and "failed after 3 tries" in n and "kept the 2 job(s)" in n for n in c.last_feed_notes)
+
+
+def test_a_page_failing_midway_keeps_the_earlier_pages():
+    def reply(args):
+        if args["page"] == 2:
+            return tm.TsentaError("connection dropped")
+        return {"jobs": [{"id": "p1"}], "hasMore": True}
+    c = client({"get-job-recommendations": reply})
+    assert [j["id"] for j in c.feed(location_sets=(["country:US"],))] == ["p1"]
+
+
+def test_a_sign_in_problem_is_never_swallowed_by_the_feed():
+    c = client({"get-job-recommendations": tm.NeedsLogin("expired")})
+    with pytest.raises(tm.NeedsLogin):
+        c.feed()
 
 
 def test_feed_stops_at_max_pages():
@@ -396,3 +433,15 @@ def test_apply_one_url_does_nothing_when_there_are_no_credits():
     f = FakeOne(balance=tm.Balance(0, 0, 1500, None, False))
     tm.apply_one_url("https://x", client=f)
     assert f.applied == []
+
+
+def test_pagination_exceeded_after_results_is_not_reported():
+    def reply(args):
+        if args["page"] == 1:
+            return {"jobs": [{"id": "a"}], "hasMore": True}
+        return {"jobs": [], "hasMore": False, "zeroResultReason": "PAGINATION_EXCEEDED"}
+    c = client({"get-job-recommendations": reply})
+    assert [j["id"] for j in c.feed(location_sets=(["country:US"],))] == ["a"]
+    assert c.last_feed_notes == []
+    empty = client({"get-job-recommendations": {"jobs": [], "hasMore": False, "zeroResultReason": "PAGINATION_EXCEEDED"}})
+    assert empty.feed(location_sets=(["country:US"],)) == [] and any("PAGINATION_EXCEEDED" in n for n in empty.last_feed_notes)

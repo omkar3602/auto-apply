@@ -130,6 +130,11 @@ class AutoApplyRun(db.Model):
     decisions = db.relationship("AutoApplyDecision", backref="run", lazy="dynamic", cascade="all, delete-orphan")
 
     @property
+    def capped(self):
+        """Jobs that passed every rule but were left out only because the run, daily or balance cap was full."""
+        return self.decisions.filter_by(action="capped").count()
+
+    @property
     def skipped(self):
         import json
         try:

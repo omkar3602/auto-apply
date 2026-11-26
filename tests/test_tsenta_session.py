@@ -115,7 +115,7 @@ def test_balance_and_feed_over_the_real_transport(fake_tsenta):
     assert [j["id"] for j in jobs] == ["a", "b", "c", "d"]                          # both pages, both location sets, "c" once
     calls = fake_tsenta["feed_calls"]
     assert [(c["locations"], c["page"]) for c in calls] == [(["country:US"], 1), (["country:US"], 2), (["state:NY"], 1)]
-    assert all(c["needsSponsorship"] is True and c["datePosted"] == "7d" for c in calls)
+    assert all(c["needsSponsorship"] is True and c["datePosted"] == "24h" for c in calls)
     assert "Software Engineer" in calls[0]["search"] and "Forward Deployed Engineer" in calls[0]["search"] and calls[0]["excludeSearch"].startswith("Staff|")
 
 

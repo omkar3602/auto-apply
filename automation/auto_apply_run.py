@@ -383,6 +383,9 @@ def _summary(run):
     body = f"found {run.found} · passed {run.passed} · {done} · failed {run.failed}"
     if run.needs_you:
         body += f" · needs you {run.needs_you}"
+    capped = run.capped
+    if capped:
+        body += f" · passed but not applied (cap) {capped}"
     if run.median_age_min is not None:
         body += f" · median age {_age_text(run.median_age_min)}"
     body += f"\nskipped: {skip_text}"
@@ -415,7 +418,8 @@ def _notify_daily_cap(app, run, now=None):
         schedule_state.save(CAP_STATE_KEY, today)                     # marked first, so a push failure can't repeat
         push.send_to_all(
             f"Daily cap reached: {sent}/{DAILY_CAP} applications",
-            "No more applications today; the scheduler resumes tomorrow. Jobs that pass in the meantime are left for the next day's runs.",
+            (f"{run.capped} job{'s' if run.capped != 1 else ''} passed every rule in this run but could not be applied to. " if run.capped else "")
+            + "No more applications today; the scheduler resumes tomorrow. Jobs that pass in the meantime are left for the next day's runs.",
             url=f"/history/auto/runs/{run.id}",
         )
     except Exception:

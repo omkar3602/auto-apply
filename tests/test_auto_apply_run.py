@@ -236,6 +236,16 @@ def test_a_run_applies_to_at_most_10_best_scores_first(app, monkeypatch):
     assert len(client.applied_ids) == 10 and client.applied_ids[0] == "t30" and "t21" in client.applied_ids and "t20" not in client.applied_ids
     assert (run.passed, run.applied) == (30, 10)
     assert AutoApplyDecision.query.filter_by(action="capped").count() == 20
+    assert run.capped == 20 and "passed but not applied (cap) 20" in app.pushes[-1][1]   # the push says how many were shorted out
+    page = app.test_client().get(f"/history/auto/runs/{run.id}").get_data(as_text=True)
+    assert "20 not applied because a cap was full" in page
+    assert "Not applied (cap)" in app.test_client().get("/history/auto/runs").get_data(as_text=True)
+
+
+def test_a_run_that_fits_under_the_cap_reports_nothing_left_out(app, monkeypatch):
+    monkeypatch.setattr(cfg, "DRY_RUN", False)
+    run = go(app, FakeClient(True, rows=[feed_row(i) for i in range(1, 4)]))
+    assert run.capped == 0 and "not applied" not in app.pushes[-1][1]
 
 
 def test_the_daily_cap_of_60_holds_across_runs(app, monkeypatch):

@@ -8,7 +8,7 @@
 </div>
 <p>
   Started {{ run.started_at | local_dt or "—" }} · {{ run.status }} ·
-  found {{ run.found }}, passed {{ run.passed }},
+  found {{ run.found }}, passed {{ run.passed }}{% if run.capped %} ({{ run.capped }} not applied because a cap was full){% endif %},
   {{ "would apply " ~ run.would_apply if run.dry_run else "applied " ~ run.applied }},
   failed {{ run.failed }}, needs you {{ run.needs_you }}
   {% if run.median_age_min is not none %}· median age of chosen jobs {{ run.median_age_min }} min {% endif %}{% if run.balance_before is not none %}· applications left {{ run.balance_before }}{% if run.balance_after is not none %} → {{ run.balance_after }}{% endif %}{% endif %}

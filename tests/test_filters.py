@@ -410,3 +410,16 @@ def test_company_key_matches_the_same_employer(a, b, same):
 
 def test_company_key_of_nothing_is_empty():
     assert f.company_key(None) == "" and f.company_key("") == ""
+
+
+@pytest.mark.parametrize("company,website,url", [
+    ("Lockheed Martin", None, "https://x.example/1"), ("Lockheed Martin Corporation", "lockheedmartin.com", "https://x.example/1"),
+    ("LOCKHEED-MARTIN Space", None, "https://x.example/1"), ("Acme Defense", None, "https://lockheedmartin.eightfold.ai/careers/job/996477933146"),
+    (None, "https://www.lockheedmartin.com", "https://x.example/1"),
+])
+def test_lockheed_martin_is_on_the_never_apply_list(company, website, url):
+    assert "never-apply list" in f.rule_never_apply(cand(company=company, company_website=website, url=url), NOW)
+
+
+def test_lockheed_does_not_catch_unrelated_names():
+    assert f.rule_never_apply(cand(company="Lockwood Labs", url="https://x.example/1"), NOW) is None

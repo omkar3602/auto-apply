@@ -9,7 +9,7 @@
 
 <table class="history-table">
   <thead>
-    <tr><th>Started</th><th>Mode</th><th>Status</th><th>Found</th><th>Passed</th><th>Applied / would</th><th>Median age</th><th>Failed</th><th>Needs you</th><th>Skipped by rule</th><th></th></tr>
+    <tr><th>Started</th><th>Mode</th><th>Status</th><th>Found</th><th>Passed</th><th title="Passed every rule but left out because a cap (per run, daily or balance) was full">Not applied (cap)</th><th>Applied / would</th><th>Median age</th><th>Failed</th><th>Needs you</th><th>Skipped by rule</th><th></th></tr>
   </thead>
   <tbody>
     {% for run in runs %}
@@ -19,6 +19,7 @@
       <td>{{ run.status }}</td>
       <td>{{ run.found }}</td>
       <td>{{ run.passed }}</td>
+      <td>{{ run.capped or '—' }}</td>
       <td>{{ run.would_apply if run.dry_run else run.applied }}</td>
       <td>{{ run.median_age_min ~ 'm' if run.median_age_min is not none else '—' }}</td>
       <td>{{ run.failed }}</td>
@@ -27,7 +28,7 @@
       <td><a href="{{ url_for('history.auto_run', run_id=run.id) }}">Details</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="11" class="empty-state">No runs yet.</td></tr>
+    <tr><td colspan="12" class="empty-state">No runs yet.</td></tr>
     {% endfor %}
   </tbody>
 </table>

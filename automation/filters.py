@@ -369,6 +369,7 @@ _NEVER_NAMES = (
     r"amazon", r"aws", r"whole foods", r"twitch", r"tesla", r"wells fargo",
     r"jpmorgan", r"jpmorganchase", r"jpmorgan chase", r"jp morgan", r"jpmc", r"chase",
     r"spacex", r"spacexsi", r"xai", r"twitter",
+    r"lockheed martin", r"lockheed",                      # added 2026-11-25
 )
 _NEVER_NAME_RE = re.compile(r"(?<![a-z0-9])(?:" + "|".join(_NEVER_NAMES) + r")(?![a-z0-9])")
 # "X" is the company's whole name, so it only counts as the entire name or
@@ -377,6 +378,7 @@ _X_CORP_RE = re.compile(r"^x(?:\s+corp(?:oration)?)?(?:\s*\(.*(?:twitter|formerl
 _NEVER_DOMAINS = (
     "amazon.com", "amazon.jobs", "wholefoodsmarket.com", "twitch.tv", "tesla.com", "wellsfargo.com", "wellsfargojobs.com",
     "chase.com", "jpmorganchase.com", "jpmorgan.com", "jpmc.fa.oraclecloud.com", "spacex.com", "x.com", "twitter.com", "x.ai",
+    "lockheedmartin.com", "lockheedmartin.eightfold.ai", "lockheedmartinjobs.com",
 )
 
 
